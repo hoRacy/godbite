@@ -44,6 +44,24 @@ const dustFragment = /* glsl */ `
   void main(){float r=length(gl_PointCoord-.5);gl_FragColor=vec4(.67,.72,.82,(1.-smoothstep(.1,.5,r))*vAlpha);}
 `;
 
+const threadVertex = /* glsl */ `
+  uniform float uTime, uPhase, uDrift;
+  varying float vPresence;
+  void main(){
+    vec3 p=position;
+    float travel=p.z*.22+p.x*.14;
+    p.x+=(sin(uTime*.16+uPhase+travel)*.75+sin(uTime*.09+p.y*.21+uPhase)*.42)*uDrift;
+    p.y+=cos(uTime*.13+uPhase*1.3+p.x*.19)*.48*uDrift;
+    p.z+=sin(uTime*.11+uPhase+p.y*.17)*.65*uDrift;
+    vPresence=.76+sin(uTime*.18+uPhase+p.x*.09)*.24;
+    gl_Position=projectionMatrix*modelViewMatrix*vec4(p,1.);
+  }
+`;
+const threadFragment = /* glsl */ `
+  uniform vec3 uColor; uniform float uOpacity; varying float vPresence;
+  void main(){gl_FragColor=vec4(uColor,uOpacity*vPresence);}
+`;
+
 export interface WorldOptions {
   canvas: HTMLCanvasElement;
   onFailure: () => void;
@@ -53,8 +71,8 @@ export class World {
   private renderer: THREE.WebGLRenderer;
   private lens: CinematicLens;
   private ritualGlow = new THREE.PointLight('#b10c2d', 75, 38, 1.7);
-  private cinemaWash = new THREE.SpotLight('#8f122e', 220, 60, .65, 1, 1.8);
-  private screenGlow = new THREE.PointLight('#a0abb7', 40, 40, 1.8);
+  private cinemaWash = new THREE.SpotLight('#a53e52', 780, 60, .95, 1, 1.8);
+  private screenGlow = new THREE.PointLight('#a0abb7', 95, 40, 1.8);
   private scene = new THREE.Scene();
   private camera = new THREE.PerspectiveCamera(44, innerWidth / innerHeight, .1, 210);
   private forest = new THREE.Group();
@@ -270,7 +288,7 @@ export class World {
     frame.position.set(0,7,0);this.cinema.add(frame);
     const screen=new THREE.Mesh(new THREE.PlaneGeometry(16,9),new THREE.MeshBasicMaterial({color:'#6b717b'}));
     screen.position.set(0,7,.2);this.cinema.add(screen);this.screens.push(screen);
-    const curtainMaterial=new THREE.MeshStandardMaterial({color:'#21030d',roughness:.96});
+    const curtainMaterial=new THREE.MeshStandardMaterial({color:'#47111f',roughness:.96});
     for(const x of [-12.4,12.4]){
       const geometry=new THREE.PlaneGeometry(8.4,22,64,1);
       const positions=geometry.attributes.position;
@@ -278,13 +296,19 @@ export class World {
       geometry.computeVertexNormals();
       const curtain=new THREE.Mesh(geometry,curtainMaterial);curtain.position.set(x,8,-.2);this.cinema.add(curtain);
     }
+    // Low side light catches velvet folds without flattening the auditorium.
+    for(const x of [-11.5,11.5]){
+      const glow=new THREE.SpotLight('#bf3654',520,32,.5,1,1.55);
+      glow.position.set(Math.sign(x)*7.8,3.2,4.2);glow.target.position.set(x,8,-.2);
+      this.cinema.add(glow,glow.target);
+    }
     const backWall=new THREE.Mesh(new THREE.PlaneGeometry(40,22),new THREE.MeshStandardMaterial({color:'#0b0608',roughness:1}));
     backWall.position.set(0,8,-.7);this.cinema.add(backWall);
     const shape=new THREE.Shape();
     shape.moveTo(-.44,0);shape.lineTo(.44,0);shape.lineTo(.44,.65);
     shape.quadraticCurveTo(.44,1,0,1);shape.quadraticCurveTo(-.44,1,-.44,.65);shape.closePath();
     const backGeometry=new THREE.ExtrudeGeometry(shape,{depth:.14,bevelEnabled:true,bevelThickness:.05,bevelSize:.05,bevelSegments:2,steps:1,curveSegments:5});
-    const seatsMaterial=new THREE.MeshStandardMaterial({color:'#070408',roughness:.9});
+    const seatsMaterial=new THREE.MeshStandardMaterial({color:'#281019',roughness:.88});
     const backrests=new THREE.InstancedMesh(backGeometry,seatsMaterial,84);
     const cushions=new THREE.InstancedMesh(new THREE.BoxGeometry(.88,.16,.85),seatsMaterial,84);
     const object=new THREE.Object3D();let count=0;
@@ -296,6 +320,9 @@ export class World {
       }
     }
     this.cinema.add(backrests,cushions);
+    const seatRim=new THREE.SpotLight('#a29dac',1050,40,.95,1,1.45);
+    seatRim.position.set(-8,7,25);seatRim.target.position.set(1,1,11);
+    this.cinema.add(seatRim,seatRim.target);
     for(const x of [-1.2,1.2]){
       const aisle=new THREE.Mesh(new THREE.BoxGeometry(.025,.018,23),new THREE.MeshBasicMaterial({color:'#a5293c'}));
       aisle.position.set(x,.02,15);this.cinema.add(aisle);
@@ -306,7 +333,7 @@ export class World {
     const beam=new THREE.Mesh(new THREE.CylinderGeometry(.05,8.5,28,24,1,true),beamMaterial);
     beam.position.set(0,7,14);beam.rotation.x=Math.PI/2;this.cinema.add(beam);
     for(let i=0;i<3;i++){
-      const mist=new THREE.Mesh(new THREE.PlaneGeometry(33,10),this.fogMaterial('#667388',.21));
+      const mist=new THREE.Mesh(new THREE.PlaneGeometry(33,10),this.fogMaterial('#667388',.10));
       mist.position.set(0,6,6+i*5);this.cinema.add(mist);
     }
     return beam;
@@ -322,8 +349,16 @@ export class World {
         points.push(new THREE.Vector3(Math.cos(angle)*radius+(random()-.5)*3,Math.sin(angle)*radius*.6+6,-random()*12));
       }
       const curve=new THREE.CatmullRomCurve3(points);
-      const thread=new THREE.Line(new THREE.BufferGeometry().setFromPoints(curve.getPoints(80)),new THREE.LineBasicMaterial({color:i%4===0?'#a5092c':'#4c5063',transparent:true,opacity:i%4===0?.16:.055}));
-      this.signal.add(thread);
+      const material=new THREE.ShaderMaterial({
+        vertexShader:threadVertex,fragmentShader:threadFragment,transparent:true,depthWrite:false,
+        uniforms:{
+          uTime:{value:0},uPhase:{value:phase},uDrift:{value:.65+random()*.8},
+          uColor:{value:new THREE.Color(i%4===0?'#c22f51':'#b3acb1')},uOpacity:{value:i%4===0?.48:.23},
+        },
+      });
+      const thread=new THREE.Line(new THREE.BufferGeometry().setFromPoints(curve.getPoints(80)),material);
+      thread.frustumCulled=false;
+      this.timeMaterials.push(material);this.signal.add(thread);
     }
     const blade=new THREE.Mesh(new THREE.PlaneGeometry(.065,20),new THREE.MeshBasicMaterial({color:'#dc2442',toneMapped:false}));
     blade.position.set(0,8,-13);this.signal.add(blade);
@@ -412,10 +447,10 @@ export class World {
     const positions=[
       new THREE.Vector3(0,3.1,16),
       new THREE.Vector3(mobile?0:5.5,mobile?4.4:4.8,mobile?-23:-27),
-      new THREE.Vector3(0,4.6,mobile?-76:-73),
+      new THREE.Vector3(0,mobile?4.2:6.0,mobile?-72:-73),
       new THREE.Vector3(0,5,-125),
     ];
-    const targets=[new THREE.Vector3(0,5,-18),new THREE.Vector3(0,3.4,-48),new THREE.Vector3(0,7,-100),new THREE.Vector3(0,6,-150)];
+    const targets=[new THREE.Vector3(0,5,-18),new THREE.Vector3(0,3.4,-48),new THREE.Vector3(0,mobile?3.9:6,-100),new THREE.Vector3(0,6,-150)];
     this.camera.position.lerpVectors(positions[segment],positions[segment+1],fraction);
     const target=new THREE.Vector3().lerpVectors(targets[segment],targets[segment+1],fraction);
     target.x+=this.pointer.x*.85;target.y-=this.pointer.y*.45;
@@ -425,7 +460,7 @@ export class World {
       +Math.pow(Math.max(0,Math.sin(this.timer*3.1)),8)*.15;
     const fog=this.scene.fog as THREE.FogExp2;
     fog.color.set('#10131b').lerp(new THREE.Color('#030207'),smooth(p,.45,1.75));
-    fog.density=THREE.MathUtils.lerp(.061,.036,smooth(p,.65,1.8))*(1+Math.sin(this.timer*.12)*.07);
+    fog.density=THREE.MathUtils.lerp(.061,.036,smooth(p,.65,1.8))*THREE.MathUtils.lerp(1,.5,smooth(p,1.55,1.98))*(1+Math.sin(this.timer*.12)*.07);
     this.whiteLight.intensity=620*forestFade*(.64+breath*.48);
     this.whiteLight.target.position.set(Math.sin(this.timer*.085)*12,3,-27+Math.sin(this.timer*.12)*4);
     this.redLight.intensity=150*forestFade*breath;
@@ -434,15 +469,16 @@ export class World {
       const reveal=.28+Math.pow(Math.max(0,Math.sin(this.timer*.15+index*.92)),4)*.19;
       material.color.setScalar(this.hoveredRelease===index?.85:reveal);
     });
-    this.cinemaWash.intensity=170*(.65+breath*.35);
-    this.screenGlow.intensity=45*(.85+Math.sin(this.timer*.91)*.08);
+    this.cinemaWash.intensity=780*(.8+breath*.2);
+    this.screenGlow.intensity=95*(.93+Math.sin(this.timer*.91)*.05);
     this.aperture.visible=p<.72;
     this.ritual.scale.setScalar(mobile?.58:1);
+    this.cinema.scale.setScalar(mobile?.7:1);
     this.forest.visible=p<1.75;this.ritual.visible=p>.1 && p<1.9;this.cinema.visible=p>1.3 && p<2.65;this.signal.visible=p>2.25;
     this.signal.rotation.z=Math.sin(this.timer*.035)*.025;
-    (this.beam.material as THREE.MeshBasicMaterial).opacity=.007+breath*.004;
+    (this.beam.material as THREE.MeshBasicMaterial).opacity=.012+breath*.006;
     const light=p<.7?new THREE.Vector3(0,4,-25):p<1.6?new THREE.Vector3(0,3,-47)
-      :p<2.45?new THREE.Vector3(0,7,-100):new THREE.Vector3(0,8,-164);
+      :p<2.45?new THREE.Vector3(0,mobile?4.9:7,-100):new THREE.Vector3(0,8,-164);
     this.lens.render(this.scene,this.camera,this.timer,p,light,breath);
   }
   private render=(now: number)=>{

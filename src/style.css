@@ -35,3 +35,7 @@ body[data-sound=waiting] .sound-bars i,body[data-sound=off] .sound-bars i,body[d
 body.motion-paused .world-shade:before,body.motion-paused .film-grain{animation-play-state:paused}
 @keyframes exhale{0%{opacity:.22;transform:translate3d(-1%,0,0) scale(1)}55%{opacity:.7}100%{opacity:.35;transform:translate3d(1%,1%,0) scale(1.04)}}
 @media(max-width:800px){.sound-hint{top:72px;max-width:182px;font-size:7px}.world-shade{background:linear-gradient(180deg,rgba(0,0,3,.35),transparent 27%,transparent 58%,rgba(0,0,3,.86))}}
+
+
+/* Keep the auditorium readable through the lower part of the frame. */
+body[data-chapter=cinema] .world-shade{background:linear-gradient(180deg,rgba(0,0,3,.4),transparent 26%,transparent 60%,rgba(0,0,3,.48)),radial-gradient(ellipse at 50% 42%,transparent 25%,rgba(0,0,4,.3) 100%)}

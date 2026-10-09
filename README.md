@@ -41,6 +41,6 @@ The canonical URL, social metadata, sitemap and robots file use that address. Up
 
 ## Atmosphere
 
-The world renders through a custom cinematic diffusion pipeline: soft focus, low-resolution halation, drifting haze, dark color grading and a vignette. Direct lighting is sparse and moving; foreground mist hides tree, stone and seat edges. HTML remains sharp and readable. Reduced-motion and unsupported-WebGL visitors receive captured frames from the same darker scenery.
+The world renders through a custom cinematic diffusion pipeline: soft focus, low-resolution halation, drifting haze, dark color grading and a vignette. Direct lighting is sparse and moving; foreground mist hides tree, stone and seat edges. Velvet curtains catch red side light, while a soft rear wash reveals the cinema seats. Signal threads deform independently with slow traveling waves in three dimensions. HTML remains sharp and readable. Reduced-motion and unsupported-WebGL visitors receive captured frames from the same darker scenery.
 
 Ambient synthesis uses two slow pressure waves, an irregular double pulse, detuned low drones, moving filtered air and a long stereo reverb. It has no audio downloads. Its AudioContext respects browser autoplay restrictions; a waiting hint explains the first-interaction requirement.

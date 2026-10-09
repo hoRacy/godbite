@@ -189,6 +189,7 @@ function updateJourney() {
     sections[i].setAttribute('aria-hidden',String(i!==index));
   });
   currentChapter=index;
+  document.body.dataset.chapter=chapters[index];
   $('#chapter-name').textContent=copy[language][chapterKeys[index]];
   $('#chapter-number').textContent=String(index+1).padStart(2,'0');
   $('#position-fill').style.width=(p/3*100)+'%';
