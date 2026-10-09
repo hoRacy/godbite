@@ -30,7 +30,7 @@ export const socials = [
 ] as const;
 export const copy = {
   en: {
-    listen: 'Listen', watch: 'Watch', contact: 'Contact', sound: 'Sound', on: 'On', off: 'Off',
+    listen: 'Listen', watch: 'Watch', contact: 'Contact', sound: 'Sound', on: 'On', off: 'Off', soundHint: 'Sound awakens with your first touch.',
     tagline: 'Dependent music / No alternative', forest: 'You wake in a white forest without windows.',
     follow: 'Follow the red light', latest: 'The latest transmission', play: 'Play film',
     threshold: 'The threshold', music: 'The ritual', cinema: 'The cinema', signal: 'The signal',
@@ -48,7 +48,7 @@ export const copy = {
     loadingFilm: 'Opening the projection…', failedFilm: 'If the projection does not start, watch on YouTube.',
   },
   pl: {
-    listen: 'Słuchaj', watch: 'Oglądaj', contact: 'Kontakt', sound: 'Dźwięk', on: 'Wł.', off: 'Wył.',
+    listen: 'Słuchaj', watch: 'Oglądaj', contact: 'Kontakt', sound: 'Dźwięk', on: 'Wł.', off: 'Wył.', soundHint: 'Dźwięk ruszy przy pierwszym dotknięciu.',
     tagline: 'Muzyka zależna / Brak alternatywy', forest: 'Budzisz się w białym lesie bez okien.',
     follow: 'Idź za czerwonym światłem', latest: 'Najnowsza transmisja', play: 'Odtwórz film',
     threshold: 'Próg', music: 'Rytuał', cinema: 'Kino', signal: 'Sygnał',

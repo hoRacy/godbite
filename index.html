@@ -28,9 +28,10 @@
     <a href="#threshold" class="brand" aria-label="Godbite — home"><svg class="sigil" viewBox="0 0 48 48" aria-hidden="true"><path d="M24 3v42M3 24h42M9 9l30 30M9 39 39 9"/><circle cx="24" cy="24" r="12"/></svg><span>GODBITE</span></a>
     <nav class="main-nav" aria-label="Main navigation"><a href="#music" data-nav="music" data-i18n="listen">Listen</a><a href="#cinema" data-nav="cinema" data-i18n="watch">Watch</a><a href="#contact" data-nav="contact" data-i18n="contact">Contact</a></nav>
     <div class="settings">
-      <button id="sound-toggle" class="sound-toggle" aria-pressed="false" aria-label="Turn on ambient sound"><span class="sound-bars" aria-hidden="true"><i></i><i></i><i></i><i></i></span><span class="sound-copy"><span data-i18n="sound">Sound</span> <span id="sound-state">Off</span></span></button>
+      <button id="sound-toggle" class="sound-toggle" aria-pressed="true" aria-label="Turn off ambient sound"><span class="sound-bars" aria-hidden="true"><i></i><i></i><i></i><i></i></span><span class="sound-copy"><span data-i18n="sound">Sound</span> <span id="sound-state">On</span></span></button>
       <div class="language-switch" role="group" aria-label="Language"><button data-lang="en" aria-pressed="true">EN</button><span>/</span><button data-lang="pl" aria-pressed="false">PL</button></div>
     </div>
+    <p id="sound-hint" class="sound-hint" role="status" aria-live="polite" hidden></p>
   </header>
   <main id="journey">
     <section id="threshold" class="chapter" aria-labelledby="hero-title">

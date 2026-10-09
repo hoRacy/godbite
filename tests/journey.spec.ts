@@ -3,16 +3,19 @@ import { test, expect } from '@playwright/test';
 test.beforeEach(async ({page})=>{
   await page.route('https://www.youtube-nocookie.com/**',route=>route.fulfill({contentType:'text/html',body:'<!doctype html><html><body>Test projection</body></html>'}));
 });
-test('first frame, working assets and no media loaded before consent',async({page})=>{
+test('first frame, working assets, default ambient and lazy film playback',async({page})=>{
   const errors:string[]=[],missing:string[]=[];
   page.on('pageerror',error=>errors.push(error.message));
+  page.on('console',message=>{if(message.type()==='error'&&/Shader Error|VALIDATE_STATUS|ERROR: 0:/.test(message.text()))errors.push(message.text());});
   page.on('response',response=>{if(response.url().includes('/godbite/')&&response.status()>=400)missing.push(response.url());});
   await page.goto('./');
   await expect(page.locator('#hero-title')).toBeVisible();
   await expect(page.locator('.main-nav')).toBeVisible();
   await expect(page.locator('body')).toHaveClass(/scene-ready|still-mode/);
   await expect(page.locator('iframe')).toHaveCount(0);
-  await expect(page.locator('#sound-toggle')).toHaveAttribute('aria-pressed','false');
+  const audioAvailable=await page.evaluate(()=>Boolean(window.AudioContext || (window as any).webkitAudioContext));
+  if(audioAvailable)await expect(page.locator('#sound-toggle')).toHaveAttribute('aria-pressed','true');
+  else await expect(page.locator('#sound-toggle')).toBeDisabled();
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
   expect(errors).toEqual([]);expect(missing).toEqual([]);
   const bytes=await page.evaluate(()=>performance.getEntriesByType('resource').reduce((sum,entry)=>sum+(entry as PerformanceResourceTiming).encodedBodySize,0));
@@ -60,18 +63,29 @@ test('Polish translation persists and booking stays directly available',async({p
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
   await page.locator('[data-lang=en]').click();await expect(page.locator('#contact-title')).toHaveText('Let it in.');
 });
-test('sound and motion are opt-in controls',async({page})=>{
+test('ambient starts with interaction, stays muted by choice, and motion can pause',async({page})=>{
   await page.goto('./');
   const audioAvailable=await page.evaluate(()=>Boolean(window.AudioContext || (window as any).webkitAudioContext));
-  await page.locator('#sound-toggle').click();
-  if(audioAvailable)await expect(page.locator('#sound-toggle')).toHaveAttribute('aria-pressed','true');
-  else await expect(page.locator('#sound-toggle')).toBeDisabled();
+  if(audioAvailable){
+    await page.locator('.brand').click();
+    await expect(page.locator('body')).toHaveAttribute('data-sound','playing');
+    await expect(page.locator('#sound-hint')).not.toBeVisible();
+    await page.locator('#sound-toggle').click();
+    await expect(page.locator('#sound-toggle')).toHaveAttribute('aria-pressed','false');
+    await page.reload();await expect(page.locator('body')).toHaveAttribute('data-sound','off');
+    await page.locator('.brand').click();await expect(page.locator('body')).toHaveAttribute('data-sound','off');
+    await page.locator('#sound-toggle').click();
+    await expect(page.locator('body')).toHaveAttribute('data-sound','playing');
+    await page.locator('[data-play=social-media-girls]').click();
+    await expect(page.locator('body')).toHaveAttribute('data-sound','film');
+    await page.keyboard.press('Escape');
+    await expect(page.locator('body')).toHaveAttribute('data-sound','playing');
+  }else await expect(page.locator('#sound-toggle')).toBeDisabled();
   if(await page.locator('body').evaluate(body=>body.classList.contains('still-mode'))){
     await expect(page.locator('#motion-toggle')).not.toBeVisible();
   }else{
     await page.locator('#motion-toggle').click();await expect(page.locator('#motion-toggle')).toHaveAttribute('aria-pressed','true');
   }
-  if(audioAvailable){await page.locator('#sound-toggle').click();await expect(page.locator('#sound-toggle')).toHaveAttribute('aria-pressed','false');}
 });
 test('reduced motion uses actual scene stills with working recording links',async({page})=>{
   await page.emulateMedia({reducedMotion:'reduce'});await page.goto('./');
@@ -110,7 +124,7 @@ test('missing audio output gives a clear fallback and keeps contact usable',asyn
     };
   });
   await page.goto('./');
-  await page.locator('#sound-toggle').click();
+  await page.locator('.brand').click();
   await expect(page.locator('#sound-toggle')).toBeDisabled();
   await expect(page.locator('#sound-toggle')).toHaveAttribute('aria-label','Sound unavailable');
   await page.locator('[data-nav=contact]').click();

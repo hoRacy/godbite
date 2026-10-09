@@ -18,8 +18,7 @@ let language: Language = 'en';
 try { if (localStorage.getItem('godbite-language') === 'pl') language = 'pl'; } catch { /* Storage can be unavailable in private browser contexts. */ }
 let selectedRelease = 0;
 let selectedFilm = films[0];
-let soundEnabled = false;
-let soundUnavailable = false;
+
 let lastInvoker: HTMLElement | null = null;
 const invokers = new WeakMap<HTMLDialogElement, HTMLElement>();
 document.addEventListener('click',event=>{
@@ -30,7 +29,7 @@ let userPaused = false;
 let stillMode = false;
 let world: World | undefined;
 let worldGeneration = 0;
-const ambient = new Ambient();
+const ambient = new Ambient(()=>updateControls());
 const releaseDialog = $<HTMLDialogElement>('#release-dialog');
 const filmDialog = $<HTMLDialogElement>('#film-dialog');
 const creditsDialog = $<HTMLDialogElement>('#credits-dialog');
@@ -134,16 +133,24 @@ $('#next-release').addEventListener('click',()=>{selectedRelease=(selectedReleas
 $('#credits-button').addEventListener('click',()=>openDialog(creditsDialog));
 $('#cinema-play').addEventListener('click',()=>openFilm(selectedFilm.id));
 document.querySelectorAll<HTMLButtonElement>('[data-play]').forEach(button=>button.addEventListener('click',()=>openFilm(button.dataset.play!)));
-$('#sound-toggle').addEventListener('click',async()=>{
-  try {soundEnabled=await ambient.toggle();updateControls();}
-  catch {soundUnavailable=true;$<HTMLButtonElement>('#sound-toggle').disabled=true;updateControls();}
-});
+$('#sound-toggle').addEventListener('click',()=>{void ambient.toggle();});
+function awakenSound(event: Event){
+  if(event.target instanceof Element && event.target.closest('#sound-toggle'))return;
+  if(event instanceof KeyboardEvent && (event.repeat||event.ctrlKey||event.altKey||event.metaKey))return;
+  void ambient.unlock();
+}
+document.addEventListener('pointerup',awakenSound,{passive:true});
+document.addEventListener('keydown',awakenSound);
 function updateControls() {
-  const text=copy[language];
-  $('#sound-state').textContent=soundUnavailable?text.unavailableState:text[soundEnabled?'on':'off'];
-  $('#sound-toggle').setAttribute('aria-pressed',String(soundEnabled));
-  $('#sound-toggle').setAttribute('aria-label',soundUnavailable?text.unavailable:text[soundEnabled?'mute':'unmute']);
-  if(soundUnavailable)$('#sound-toggle').setAttribute('aria-disabled','true');
+  const text=copy[language],state=ambient.state;
+  const unavailable=state==='unavailable';
+  document.body.dataset.sound=state;
+  $('#sound-state').textContent=unavailable?text.unavailableState:text[ambient.requested?'on':'off'];
+  const toggle=$<HTMLButtonElement>('#sound-toggle');
+  toggle.setAttribute('aria-pressed',String(ambient.requested));
+  toggle.setAttribute('aria-label',unavailable?text.unavailable:text[ambient.requested?'mute':'unmute']);
+  toggle.disabled=unavailable;toggle.setAttribute('aria-disabled',String(unavailable));
+  const hint=$('#sound-hint');hint.hidden=state!=='waiting';hint.textContent=text.soundHint;
   $('#motion-toggle').setAttribute('aria-label',text[userPaused?'resume':'pause']);
   $('#motion-toggle').setAttribute('aria-pressed',String(userPaused));
   $('#motion-toggle').querySelector('span')!.textContent=userPaused?'▷':'Ⅱ';
@@ -190,7 +197,7 @@ function updateJourney() {
     else anchor.removeAttribute('aria-current');
   });
   if(stillMode)still.style.backgroundImage='url("'+asset('images/'+chapters[index]+'.webp')+'")';
-  world?.setProgress(p);
+  world?.setProgress(p);ambient.setProgress(p);
 }
 function requestJourney() { if(!scrollPending){scrollPending=true;requestAnimationFrame(updateJourney);} }
 addEventListener('scroll',requestJourney,{passive:true});
@@ -245,4 +252,4 @@ reducedMotion.addEventListener('change',()=>{
   ++worldGeneration;
   if(reducedMotion.matches)useStills();else void startWorld();
 });
-translate();updateJourney();onHash();void startWorld();
+translate();updateJourney();onHash();ambient.boot();void startWorld();

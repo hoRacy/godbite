@@ -13,6 +13,7 @@ const browser=await chromium.launch({
 const page=await browser.newPage({viewport:{width:1600,height:1000},deviceScaleFactor:1});
 const errors=[];
 page.on('pageerror',error=>errors.push(error.message));
+page.on('console',message=>{if(message.type()==='error')errors.push(message.text());});
 await page.goto((process.argv[2]||'http://127.0.0.1:5173/godbite/')+'?capture=1');
 await page.waitForSelector('body.scene-ready',{timeout:30000});
 await page.evaluate(()=>document.fonts.ready);

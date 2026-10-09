@@ -18,3 +18,20 @@ body.modal-open{overflow:hidden}body.motion-paused .film-grain{animation-play-st
 @media(max-height:700px) and (max-width:800px){.hero-lower{bottom:132px}.contact-body h2{font-size:70px}.contact-poem{margin-bottom:20px}.contact-stage{padding-top:96px;padding-bottom:130px}.contact-body>.eyebrow{font-size:8px}.band-bio{margin:15px auto}.chapter-heading{top:105px}.chapter-heading h2{font-size:39px}.release-list button{padding:9px 0}.release-list{bottom:125px}.cinema-lower{bottom:120px}.cinema-lower h2{font-size:31px}}
 @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}*,*:before,*:after{animation:none!important;transition:none!important}.chapter-stage{will-change:auto}}
 body.still-mode #motion-toggle{visibility:hidden}
+
+/* Light is allowed to reveal only fragments of the world. */
+:root{--bone:#d8d1ca;--muted:#a39d9c;--red:#bc1e3d;--black:#020204}
+#still-world{background-color:#020204}
+.world-shade{background:linear-gradient(180deg,rgba(0,0,3,.44),transparent 26%,transparent 56%,rgba(0,0,3,.83)),radial-gradient(ellipse at 50% 42%,transparent 18%,rgba(0,0,4,.48) 100%)}
+.world-shade:before{content:'';position:absolute;inset:-10%;background:radial-gradient(ellipse at 52% 58%,rgba(132,0,30,.1),transparent 45%),radial-gradient(ellipse at 30% 27%,rgba(75,85,110,.035),transparent 40%);mix-blend-mode:screen;animation:exhale 17s ease-in-out infinite alternate}
+.film-grain{opacity:.085}
+.hero-heading h1{color:#d0c9c3;text-shadow:0 0 3px rgba(218,203,206,.32),0 0 28px rgba(124,100,107,.1);filter:blur(.18px)}
+.hero-poem,.hero-kicker{text-shadow:0 2px 12px #000}
+.chapter-heading h2,.cinema-lower h2,.contact-body h2{text-shadow:0 0 18px rgba(217,196,200,.07)}
+.sound-hint{position:absolute;right:var(--edge);top:78px;max-width:220px;text-align:right;margin:0;font-size:8px;line-height:1.8;letter-spacing:.045em;color:#b0a5a9;pointer-events:none}
+.sound-hint:before{content:'';display:inline-block;width:3px;height:3px;vertical-align:middle;background:#b51937;box-shadow:0 0 10px #cc173e;margin-right:9px}
+body[data-sound=playing] .sound-bars i{animation-play-state:running}
+body[data-sound=waiting] .sound-bars i,body[data-sound=off] .sound-bars i,body[data-sound=film] .sound-bars i{animation:none;transform:scaleY(.3)}
+body.motion-paused .world-shade:before,body.motion-paused .film-grain{animation-play-state:paused}
+@keyframes exhale{0%{opacity:.22;transform:translate3d(-1%,0,0) scale(1)}55%{opacity:.7}100%{opacity:.35;transform:translate3d(1%,1%,0) scale(1.04)}}
+@media(max-width:800px){.sound-hint{top:72px;max-width:182px;font-size:7px}.world-shade{background:linear-gradient(180deg,rgba(0,0,3,.35),transparent 27%,transparent 58%,rgba(0,0,3,.86))}}
