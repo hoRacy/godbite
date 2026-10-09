@@ -6,6 +6,7 @@ import './style.css';
 import { asset, copy, films, releases, socials } from './content';
 import type { Chapter, Language } from './content';
 import { Ambient } from './ambient';
+import { SCENE_ANCHORS, chapterPresentation } from './journey';
 import type { World } from './world';
 
 const $ = <T extends HTMLElement = HTMLElement>(selector: string) => document.querySelector<T>(selector)!;
@@ -135,12 +136,13 @@ $('#cinema-play').addEventListener('click',()=>openFilm(selectedFilm.id));
 document.querySelectorAll<HTMLButtonElement>('[data-play]').forEach(button=>button.addEventListener('click',()=>openFilm(button.dataset.play!)));
 $('#sound-toggle').addEventListener('click',()=>{void ambient.toggle();});
 function awakenSound(event: Event){
-  if(event.target instanceof Element && event.target.closest('#sound-toggle'))return;
-  if(event instanceof KeyboardEvent && (event.repeat||event.ctrlKey||event.altKey||event.metaKey))return;
+  if(event.target instanceof Element && event.target.closest('#sound-toggle') &&
+    ['pointerdown','pointerup','touchstart','touchend','click','keydown'].includes(event.type))return;
   void ambient.unlock();
 }
-document.addEventListener('pointerup',awakenSound,{passive:true});
-document.addEventListener('keydown',awakenSound);
+for(const type of ['pointermove','pointerdown','pointerup','wheel','scroll','touchstart','touchmove','touchend','click','keydown']){
+  document.addEventListener(type,awakenSound,{passive:true,capture:true});
+}
 function updateControls() {
   const text=copy[language],state=ambient.state;
   const unavailable=state==='unavailable';
@@ -177,19 +179,27 @@ document.querySelectorAll<HTMLButtonElement>('[data-lang]').forEach(button=>butt
   translate();
 }));
 
-function progress() { return Math.min(3,Math.max(0,scrollY/sections[0].offsetHeight)); }
+function progress(){
+  const y=Math.max(0,scrollY);
+  for(let index=0;index<sections.length-1;index++){
+    const start=sections[index].offsetTop,end=sections[index+1].offsetTop;
+    if(y<end)return SCENE_ANCHORS[index]+(SCENE_ANCHORS[index+1]-SCENE_ANCHORS[index])*Math.max(0,(y-start)/(end-start));
+  }
+  return 3;
+}
 let scrollPending=false;
 function updateJourney() {
   scrollPending=false;
-  const p=progress(),index=Math.min(3,Math.floor(p+.5));
-  const distance=Math.abs(p-index);
+  const p=progress(),{index,opacity}=chapterPresentation(p);
   stages.forEach((stage,i)=>{
-    stage.hidden=i!==index;stage.inert=i!==index;
-    stage.style.opacity=String(i===index?Math.max(.1,1-Math.pow(distance*2,3)):0);
-    sections[i].setAttribute('aria-hidden',String(i!==index));
+    const hidden=i!==index||opacity<.001;
+    stage.hidden=hidden;stage.inert=hidden;
+    stage.style.opacity=String(i===index?opacity:0);
+    sections[i].setAttribute('aria-hidden',String(hidden));
   });
   currentChapter=index;
   document.body.dataset.chapter=chapters[index];
+  if(index!==2)world?.setFilmHovered(false);
   $('#chapter-name').textContent=copy[language][chapterKeys[index]];
   $('#chapter-number').textContent=String(index+1).padStart(2,'0');
   $('#position-fill').style.width=(p/3*100)+'%';
@@ -232,6 +242,12 @@ $('#motion-toggle').addEventListener('click',()=>{
   syncModalState();updateControls();
 });
 
+const projection=$('#cinema-play');
+projection.addEventListener('pointerenter',()=>world?.setFilmHovered(true));
+projection.addEventListener('pointerleave',()=>world?.setFilmHovered(false));
+projection.addEventListener('focus',()=>world?.setFilmHovered(true));
+projection.addEventListener('blur',()=>world?.setFilmHovered(false));
+
 function useStills() {
   stillMode=true;document.body.classList.add('still-mode');document.body.classList.remove('scene-ready');
   world?.destroy();world=undefined;
@@ -243,7 +259,10 @@ async function startWorld() {
   try {
     const {World}=await import('./world');
     if(generation!==worldGeneration || reducedMotion.matches)return;
-    world=new World({canvas:$<HTMLCanvasElement>('#world-canvas'),onFailure:useStills,onRelease:openRelease});
+    world=new World({canvas:$<HTMLCanvasElement>('#world-canvas'),onFailure:useStills,onRelease:openRelease,onFilm:()=>openFilm(selectedFilm.id),onRecording:index=>{
+      document.body.dataset.currentRecording=releases[index].id;
+      releaseList.querySelectorAll('button').forEach((button,item)=>button.classList.toggle('is-current',item===index));
+    }});
     stillMode=false;document.body.classList.remove('still-mode');
     world.setProgress(progress());world.setPaused(userPaused);
     if(selectedFilm.id!==films[0].id)world.selectFilm(selectedFilm.id);

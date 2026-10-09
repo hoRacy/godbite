@@ -34,19 +34,23 @@ const film = /* glsl */ `
   float cloud(vec2 p){return noise(p)*.67+noise(p*2.07)*.33;}
   void main(){
     vec2 center=vUv-.5;
+    float gallery=smoothstep(.85,1.12,uJourney)*(1.-smoothstep(1.72,1.94,uJourney));
+    float cinema=smoothstep(1.72,1.98,uJourney)*(1.-smoothstep(2.4,2.65,uJourney));
+    float diffusion=mix(1.,.12,gallery)*mix(1.,.78,cinema);
     vec2 flow=vec2(uTime*.024,-uTime*.012);
     float vapor=cloud(vUv*vec2(4.1,2.6)+flow);
-    vec2 uv=clamp(vUv+vec2(sin(vUv.y*11.+uTime*.13),cos(vUv.x*7.-uTime*.08))*.00075*vapor,.001,.999);
-    float defocus=(.75+smoothstep(.12,.56,length(center)))*2.0;
+    vec2 uv=clamp(vUv+vec2(sin(vUv.y*11.+uTime*.13),cos(vUv.x*7.-uTime*.08))*.00075*vapor*diffusion,.001,.999);
+    float defocus=(.75+smoothstep(.12,.56,length(center)))*2.0*diffusion;
     vec2 px=uPixel*defocus;
     vec3 c=texture2D(uScene,uv).rgb*.38;
     c+=(texture2D(uScene,uv+vec2(px.x,0.)).rgb+texture2D(uScene,uv-vec2(px.x,0.)).rgb)*.16;
     c+=(texture2D(uScene,uv+vec2(0.,px.y)).rgb+texture2D(uScene,uv-vec2(0.,px.y)).rgb)*.15;
     float grey=dot(c,vec3(.2126,.7152,.0722));
     float red=clamp((c.r-max(c.g,c.b))*3.,0.,1.);
-    c=mix(vec3(grey)*vec3(.88,.94,1.),c,.48+red*.42);
+    c=mix(vec3(grey)*vec3(.88,.94,1.),c,min(1.,.48+red*.42+gallery*.35));
     vec3 halo=texture2D(uGlow,uv).rgb;
-    c+=halo*.8+vec3(halo.r*.075,0.,0.);
+    float halation=mix(.8,.12,gallery)*mix(1.,.75,cinema);
+    c+=halo*halation+vec3(halo.r*.075*diffusion,0.,0.);
     vec2 lightDelta=(uv-uLight)*vec2(uAspect,1.);
     float distanceToLight=length(lightDelta);
     float aureole=exp(-distanceToLight*distanceToLight*14.);
@@ -54,7 +58,7 @@ const film = /* glsl */ `
     float shafts=pow(max(0.,sin(rayAngle*19.+vapor*2.5+uTime*.028)),12.);
     c+=uLightColor*(aureole*(.035+.075*vapor)+shafts*.018*exp(-distanceToLight*3.)+exp(-abs(lightDelta.y)*120.)*exp(-abs(lightDelta.x)*2.5)*.018)*uBreath;
     float curtain=cloud(vUv*vec2(2.9,3.7)-flow*.6+4.3);
-    c*=1.-smoothstep(.34,.83,curtain)*.38;
+    c*=1.-smoothstep(.34,.83,curtain)*mix(.38,.09,gallery)*mix(1.,.8,cinema);
     c+=vec3(.013,.016,.021)*pow(vapor,2.)*(.7+uBreath*.3);
     float auditorium=smoothstep(1.65,1.98,uJourney)*(1.-smoothstep(2.3,2.65,uJourney));
     float vignette=1.-smoothstep(.16,.76,length(center*vec2(.82,1.)));
@@ -65,7 +69,7 @@ const film = /* glsl */ `
     #include <tonemapping_fragment>
     #include <colorspace_fragment>
     float grain=hash(gl_FragCoord.xy+floor(uTime*14.)*vec2(13.1,7.7))-.5;
-    gl_FragColor.rgb=max(vec3(0.),gl_FragColor.rgb+grain*.018);
+    gl_FragColor.rgb=max(vec3(0.),gl_FragColor.rgb+grain*mix(.018,.006,gallery)*mix(1.,.8,cinema));
   }
 `;
 
@@ -122,7 +126,8 @@ export class CinematicLens {
     this.grade.uniforms.uBreath.value=breath;
     const projected=light.clone().project(camera);
     this.grade.uniforms.uLight.value.set(projected.x*.5+.5,projected.y*.5+.5);
-    this.grade.uniforms.uLightColor.value.set(journey>1.6&&journey<2.4?'#85939f':'#e31332');
+    const cinema=THREE.MathUtils.smoothstep(journey,1.72,1.98)*(1-THREE.MathUtils.smoothstep(journey,2.4,2.65));
+    this.grade.uniforms.uLightColor.value.set('#e31332').lerp(new THREE.Color('#85939f'),cinema);
     this.quad.material=this.grade;
     this.renderer.setRenderTarget(null);this.renderer.render(this.scene,this.camera);
   }

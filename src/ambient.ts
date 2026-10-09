@@ -9,9 +9,9 @@ function modulation(context: BaseAudioContext, frequency: number, depth: number,
 
 /** The same synthesis graph can be rendered offline to check its dynamics without an audio device. */
 export function createAtmosphere(context: BaseAudioContext, output: AudioNode) {
-  const pressure=context.createGain();pressure.gain.value=.64;pressure.connect(output);
-  modulation(context,.035,.18,pressure.gain);
-  modulation(context,.116,.15,pressure.gain);
+  const pressure=context.createGain();pressure.gain.value=.82;pressure.connect(output);
+  modulation(context,.035,.09,pressure.gain);
+  modulation(context,.116,.065,pressure.gain);
 
   const pulse=context.createOscillator();pulse.frequency.value=.48;
   modulation(context,.023,.047,pulse.frequency);
@@ -43,10 +43,10 @@ export function createAtmosphere(context: BaseAudioContext, output: AudioNode) {
     data[i]=previous*2.4;
   }
   const noise=context.createBufferSource();noise.buffer=buffer;noise.loop=true;
-  const wind=context.createBiquadFilter();wind.type='lowpass';wind.frequency.value=255;wind.Q.value=.65;
-  modulation(context,.042,145,wind.frequency);
-  const windLevel=context.createGain();windLevel.gain.value=.55;
-  modulation(context,.078,.22,windLevel.gain);
+  const wind=context.createBiquadFilter();wind.type='lowpass';wind.frequency.value=330;wind.Q.value=.65;
+  modulation(context,.042,90,wind.frequency);
+  const windLevel=context.createGain();windLevel.gain.value=.48;
+  modulation(context,.078,.10,windLevel.gain);
   const movement=context.createStereoPanner();modulation(context,.027,.72,movement.pan);
   noise.connect(wind).connect(windLevel).connect(movement).connect(pressure);
 
@@ -72,6 +72,13 @@ export function createAtmosphere(context: BaseAudioContext, output: AudioNode) {
   veil.connect(delay);delay.connect(feedback).connect(delay);
   const echoLevel=context.createGain();echoLevel.gain.value=.2;
   delay.connect(echoLevel).connect(pressure);
+  // A continuous bed bypasses the pulse so its valleys never become silence.
+  const floorFilter=context.createBiquadFilter(),floorLevel=context.createGain();
+  floorFilter.type='lowpass';floorFilter.frequency.value=680;floorFilter.Q.value=.5;
+  floorLevel.gain.value=.14;noise.connect(floorFilter).connect(floorLevel).connect(output);
+  const foundation=context.createOscillator(),foundationLevel=context.createGain();
+  foundation.frequency.value=96;foundationLevel.gain.value=.035;
+  foundation.connect(foundationLevel).connect(output);foundation.start();
   noise.start();
   return {wind,pressure};
 }
@@ -109,7 +116,12 @@ export class Ambient {
     if(this.enabled)await this.unlock();
   }
   async unlock(){
-    if(!this.enabled||this.unavailable||this.resuming||this.context?.state==='running')return;
+    if(!this.enabled||this.unavailable||this.context?.state==='running')return;
+    if(this.resuming){
+      // A mouse move may leave resume pending until a later activating gesture.
+      if(navigator.userActivation?.isActive)void this.context?.resume().catch(()=>{});
+      return;
+    }
     this.resuming=true;
     let timeout: ReturnType<typeof setTimeout> | undefined;
     try{
@@ -117,7 +129,12 @@ export class Ambient {
       const context=this.context!;
       await Promise.race([
         context.resume(),
-        new Promise<never>((_,reject)=>{timeout=setTimeout(()=>reject(new Error('Audio output unavailable')),4000);}),
+        new Promise<void>((resolve,reject)=>{timeout=setTimeout(()=>{
+          if(context.state==='running')resolve();
+          else if(context.state==='suspended' && navigator.userActivation?.hasBeenActive===false){
+            reject(new DOMException('Audio is waiting for browser activation','NotAllowedError'));
+          }else reject(new Error('Audio output unavailable'));
+        },4000);}),
       ]);
       if((context.state as AudioContextState)!=='running')throw new Error('Audio output unavailable');
       this.update();
@@ -132,7 +149,7 @@ export class Ambient {
   setBlocked(blocked: boolean){this.blocked=blocked;this.update();}
   setProgress(progress: number){
     this.progress=progress;
-    this.graph?.wind.frequency.setTargetAtTime(255-70*Math.min(progress,3)/3,this.context!.currentTime,2);
+    this.graph?.wind.frequency.setTargetAtTime(330-45*Math.min(progress,3)/3,this.context!.currentTime,2);
   }
   private create(){
     if(this.context)return;

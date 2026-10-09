@@ -29,8 +29,9 @@ test('the real ambient waveform swells, pulses and has stereo movement without c
     }
     return {rms,peak,stereoDifference:Math.sqrt(difference/left.length),dynamicRatio:Math.max(...rms)/Math.min(...rms)};
   });
-  expect(result.dynamicRatio).toBeGreaterThan(1.45);
-  expect(Math.min(...result.rms)).toBeGreaterThan(.002);
+  expect(result.dynamicRatio).toBeGreaterThan(1.3);
+  expect(result.dynamicRatio).toBeLessThan(2.8);
+  expect(Math.min(...result.rms)).toBeGreaterThan(.008);
   expect(result.peak).toBeLessThan(.35);
   expect(result.stereoDifference).toBeGreaterThan(.001);
   await test.info().attach('ambient-dynamics',{body:JSON.stringify(result,null,2),contentType:'application/json'});

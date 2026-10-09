@@ -39,3 +39,17 @@ body.motion-paused .world-shade:before,body.motion-paused .film-grain{animation-
 
 /* Keep the auditorium readable through the lower part of the frame. */
 body[data-chapter=cinema] .world-shade{background:linear-gradient(180deg,rgba(0,0,3,.4),transparent 26%,transparent 60%,rgba(0,0,3,.48)),radial-gradient(ellipse at 50% 42%,transparent 25%,rgba(0,0,4,.3) 100%)}
+
+/* Preserve the original 160svh forest timing, then finish the entrance dolly. */
+#threshold{height:185.6svh}
+/* The record gallery has time to visit all five offerings. */
+#music{height:340svh}
+.hero-heading h1{font-size:0;letter-spacing:normal;line-height:0;padding:0;transform:none;filter:none;text-shadow:none}
+.hero-logo{display:block;width:min(68vw,1100px);height:auto;margin:18px auto;opacity:.74;filter:brightness(.82) sepia(.08) drop-shadow(0 0 18px rgba(168,145,150,.08))}
+body[data-chapter=music] .world-shade{background:linear-gradient(180deg,rgba(0,0,3,.3),transparent 26%,transparent 65%,rgba(0,0,3,.57)),radial-gradient(ellipse at 50% 45%,transparent 30%,rgba(0,0,4,.25) 100%)}
+.release-list button.is-current .release-list-title{color:#fff1dc;text-shadow:0 0 14px rgba(244,176,138,.3)}
+.release-list button.is-current .release-list-no{color:#db916d}
+@media(max-width:800px){#music{height:370svh}.hero-logo{width:78vw;margin:20px auto}.chapter-heading{top:120px}.chapter-heading h2{font-size:38px}.release-list button{padding:9px 0}.release-list-title{font-size:17px}}
+
+@media(max-width:800px){body[data-chapter=music] .chapter-heading h2{font-size:28px;margin:12px 0}body[data-chapter=music] .section-whisper{display:none}body[data-chapter=music] .release-list{bottom:126px}body[data-chapter=music] .release-list button{padding:8px 0}}
+.credits-manifesto{font-family:var(--serif);font-size:18px;line-height:1.7}.credits-invocation{font-size:10px;line-height:1.9;letter-spacing:.04em;color:var(--bone);padding:22px 0;border-top:1px solid #e8e3d822;border-bottom:1px solid #e8e3d822}

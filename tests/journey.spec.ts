@@ -30,6 +30,8 @@ test('five recordings, latest listening in two clicks and dialog keyboard behavi
   for(const title of ['JISM','Mir','the Aristocrats','You can lead a horse EP']){
     await page.locator('#next-release').click();
     await expect(page.locator('#release-title')).toHaveText(title);
+    if(title==='the Aristocrats')await expect(page.locator('#release-links a').first()).toHaveAttribute('href','https://open.spotify.com/album/2bHyQF36UreAU70VC7mx3l');
+    if(title==='You can lead a horse EP')await expect(page.locator('#release-links a').first()).toHaveAttribute('href','https://open.spotify.com/album/2dEzIU90xRp9QfZoYCWYD2');
     await expect.poll(()=>page.locator('#release-cover').evaluate((img:HTMLImageElement)=>img.complete&&img.naturalWidth>0)).toBe(true);
     await expect(page.locator('#release-links a').last()).toHaveAttribute('href',/godbite.bandcamp.com/);
   }
@@ -87,6 +89,75 @@ test('ambient starts with interaction, stays muted by choice, and motion can pau
     await page.locator('#motion-toggle').click();await expect(page.locator('#motion-toggle')).toHaveAttribute('aria-pressed','true');
   }
 });
+for(const interaction of ['pointermove','pointerdown','pointerup','wheel','scroll','touchstart','touchmove','touchend','click','keydown']){
+  test(`ambient attempts to start on ${interaction}`,async({page})=>{
+    await page.emulateMedia({reducedMotion:'reduce'});
+    await page.addInitScript(()=>{
+      const Native=window.AudioContext;
+      window.AudioContext=class extends Native {
+        private playing=false;
+        get state(): AudioContextState {return this.playing?'running':'suspended';}
+        async resume(){this.playing=true;}
+      };
+    });
+    await page.goto('./');
+    await expect(page.locator('body')).toHaveAttribute('data-sound','waiting');
+    // This isolates event wiring from the browser's separate autoplay policy.
+    await page.evaluate(type=>document.body.dispatchEvent(new Event(type,{bubbles:true})),interaction);
+    await expect(page.locator('body')).toHaveAttribute('data-sound','playing');
+    await expect(page.locator('#sound-hint')).not.toBeVisible();
+    await page.locator('#sound-toggle').click();
+    await page.evaluate(type=>document.body.dispatchEvent(new Event(type,{bubbles:true})),interaction);
+    await expect(page.locator('body')).toHaveAttribute('data-sound','off');
+  });
+}
+
+test('mouse movement blocked by autoplay stays retryable after the timeout',async({page})=>{
+  await page.emulateMedia({reducedMotion:'reduce'});
+  await page.addInitScript(()=>{
+    let activated=false;
+    document.addEventListener('pointerdown',()=>{activated=true;},true);
+    Object.defineProperty(navigator,'userActivation',{value:{
+      get isActive(){return activated;},get hasBeenActive(){return activated;},
+    }});
+    const Native=window.AudioContext;
+    window.AudioContext=class extends Native {
+      private playing=false;
+      get state(): AudioContextState {return this.playing?'running':'suspended';}
+      resume(): Promise<void> {
+        if(!navigator.userActivation.isActive)return new Promise(()=>{});
+        this.playing=true;return Promise.resolve();
+      }
+    };
+  });
+  await page.goto('./');
+  await page.mouse.move(40,100);
+  await page.waitForTimeout(4500);
+  await expect(page.locator('body')).toHaveAttribute('data-sound','waiting');
+  await expect(page.locator('#sound-toggle')).toBeEnabled();
+  await page.locator('.brand').click();
+  await expect(page.locator('body')).toHaveAttribute('data-sound','playing');
+});
+
+test('a click can unlock audio while a mouse-move resume is pending',async({page})=>{
+  await page.emulateMedia({reducedMotion:'reduce'});
+  await page.addInitScript(()=>{
+    const Native=window.AudioContext;
+    window.AudioContext=class extends Native {
+      private playing=false;
+      get state(): AudioContextState {return this.playing?'running':'suspended';}
+      resume(): Promise<void> {
+        if(!navigator.userActivation.isActive)return new Promise(()=>{});
+        this.playing=true;this.dispatchEvent(new Event('statechange'));return Promise.resolve();
+      }
+    };
+  });
+  await page.goto('./');
+  await page.mouse.move(40,100);
+  await page.locator('.brand').click();
+  await expect(page.locator('body')).toHaveAttribute('data-sound','playing');
+});
+
 test('reduced motion uses actual scene stills with working recording links',async({page})=>{
   await page.emulateMedia({reducedMotion:'reduce'});await page.goto('./');
   await expect(page.locator('body')).toHaveClass(/still-mode/);
