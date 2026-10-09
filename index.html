@@ -1,1 +1,91 @@
-You can lead a horse!!!
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#080909" />
+  <meta name="description" content="Godbite. Dependent music. No alternative. Progressive rock and metal from Szczecin, Poland. Enter the white forest. Music, films and booking." />
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="GODBITE — A white forest without windows" />
+  <meta property="og:description" content="Dependent music. No alternative. Five bodies. An appetite for ritual." />
+  <meta property="og:url" content="https://horacy.github.io/godbite/" />
+  <meta property="og:image" content="https://horacy.github.io/godbite/images/social-card.jpg" />
+  <meta property="og:image:width" content="1200" /><meta property="og:image:height" content="630" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <link rel="canonical" href="https://horacy.github.io/godbite/" />
+  <link rel="icon" type="image/svg+xml" href="%BASE_URL%favicon.svg" />
+  <link rel="preload" href="%BASE_URL%images/threshold.webp" as="image" />
+  <title>GODBITE — Dependent music / No alternative</title>
+  <script type="application/ld+json">{"@context":"https://schema.org","@type":"MusicGroup","name":"Godbite","url":"https://horacy.github.io/godbite/","email":"godbite@gmail.com","genre":["Progressive rock","Alternative metal"],"foundingLocation":{"@type":"Place","name":"Szczecin, Poland"},"sameAs":["https://www.facebook.com/Godbite","https://www.instagram.com/godbite.pl/","https://www.youtube.com/@godbiteband","https://godbite.bandcamp.com/","https://open.spotify.com/artist/7coe5YJdUFZErziBQZS9Eh"]}</script>
+</head>
+<body>
+  <a class="skip-link" href="#contact" data-i18n="skip">Skip to contact</a>
+  <div class="world" aria-hidden="true">
+    <div id="still-world"></div><canvas id="world-canvas"></canvas><div class="world-shade"></div><div class="film-grain"></div>
+    <div class="frame-mark frame-mark--tl"></div><div class="frame-mark frame-mark--br"></div>
+  </div>
+  <header class="masthead">
+    <a href="#threshold" class="brand" aria-label="Godbite — home"><svg class="sigil" viewBox="0 0 48 48" aria-hidden="true"><path d="M24 3v42M3 24h42M9 9l30 30M9 39 39 9"/><circle cx="24" cy="24" r="12"/></svg><span>GODBITE</span></a>
+    <nav class="main-nav" aria-label="Main navigation"><a href="#music" data-nav="music" data-i18n="listen">Listen</a><a href="#cinema" data-nav="cinema" data-i18n="watch">Watch</a><a href="#contact" data-nav="contact" data-i18n="contact">Contact</a></nav>
+    <div class="settings">
+      <button id="sound-toggle" class="sound-toggle" aria-pressed="false" aria-label="Turn on ambient sound"><span class="sound-bars" aria-hidden="true"><i></i><i></i><i></i><i></i></span><span class="sound-copy"><span data-i18n="sound">Sound</span> <span id="sound-state">Off</span></span></button>
+      <div class="language-switch" role="group" aria-label="Language"><button data-lang="en" aria-pressed="true">EN</button><span>/</span><button data-lang="pl" aria-pressed="false">PL</button></div>
+    </div>
+  </header>
+  <main id="journey">
+    <section id="threshold" class="chapter" aria-labelledby="hero-title">
+      <div class="chapter-stage hero-stage">
+        <div class="hero-heading"><p class="eyebrow hero-kicker" data-i18n="tagline">Dependent music / No alternative</p><h1 id="hero-title">GODBITE</h1><p class="hero-poem" data-i18n="forest">You wake in a white forest without windows.</p></div>
+        <div class="hero-lower">
+          <a href="#music" class="journey-link" data-journey="music"><span class="small-index">01 — 04</span><span data-i18n="follow">Follow the red light</span><span class="long-arrow" aria-hidden="true">↓</span></a>
+          <div class="latest-release"><span class="eyebrow" data-i18n="latest">The latest transmission</span><button class="latest-film" data-play="social-media-girls"><span>Social Media Girls</span><span class="play-small" aria-hidden="true">↗</span></button><a class="latest-listen" href="https://open.spotify.com/album/4yji0Hoa0DhRDht4PMfB3z" target="_blank" rel="noopener noreferrer"><span data-i18n="listen">Listen</span> <span aria-hidden="true">↗</span></a></div>
+        </div>
+      </div>
+    </section>
+    <section id="music" class="chapter" aria-labelledby="music-title">
+      <div class="chapter-stage music-stage" hidden>
+        <div class="chapter-heading"><p class="eyebrow"><span class="red-dot"></span> II / <span data-i18n="music">The ritual</span></p><h2 id="music-title" data-i18n="musicTitle">Five offerings.</h2><p class="section-whisper" data-i18n="musicIntro">Something of us remains in every recording.</p></div>
+        <ol id="release-list" class="release-list" aria-label="Choose a recording"></ol><span class="ritual-line" aria-hidden="true"></span>
+      </div>
+    </section>
+    <section id="cinema" class="chapter" aria-labelledby="cinema-title">
+      <div class="chapter-stage cinema-stage" hidden>
+        <p class="eyebrow cinema-label"><span class="red-dot"></span> III / <span data-i18n="cinema">The cinema</span></p>
+        <button id="cinema-play" class="projection-play"><span class="play-circle" aria-hidden="true">▷</span><span data-i18n="play">Play film</span></button>
+        <div class="cinema-lower"><div><p id="film-kind" class="eyebrow">Official music video</p><h2 id="cinema-title">Social Media Girls</h2></div><div id="film-list" class="film-list" role="group" aria-label="Choose a film"></div></div>
+      </div>
+    </section>
+    <section id="contact" class="chapter" aria-labelledby="contact-title">
+      <div class="chapter-stage contact-stage" hidden>
+        <div class="contact-body">
+          <p class="eyebrow"><span class="red-dot"></span> IV / <span data-i18n="signal">The signal</span></p><h2 id="contact-title" data-i18n="contactTitle">Let it in.</h2><p class="contact-poem" data-i18n="poem">The nets tangle the fingers that wove them.</p>
+          <div class="contact-address"><span class="eyebrow" data-i18n="booking">Booking / Contact</span><a href="mailto:godbite@gmail.com">godbite@gmail.com <span aria-hidden="true">↗</span></a></div>
+          <p class="band-bio" data-i18n="bio">Five bodies. An appetite for ritual. Progressive rock and metal from Szczecin, Poland.</p>
+          <nav id="social-links" class="social-links" aria-label="Godbite on social media"></nav>
+        </div>
+      </div>
+    </section>
+  </main>
+  <footer class="frame-footer">
+    <div class="origin">SZCZECIN, PL <span class="origin-coordinates">53°25′ N &nbsp; 14°33′ E</span></div>
+    <div class="footer-controls"><button id="motion-toggle" aria-label="Pause motion" aria-pressed="false"><span aria-hidden="true">Ⅱ</span></button><button id="credits-button" data-i18n="credits">Credits</button></div>
+    <div class="chapter-position"><span id="chapter-name">The threshold</span><span id="chapter-number">01</span><span class="position-track"><i id="position-fill"></i></span><span class="total-chapters">04</span></div>
+  </footer>
+  <dialog id="release-dialog" class="release-dialog" aria-labelledby="release-title">
+    <button class="dialog-close" data-close aria-label="Close">×</button>
+    <div class="release-art"><img id="release-cover" alt="" width="700" height="700"/><p id="art-credit" class="eyebrow"></p></div>
+    <div class="release-info"><p id="release-meta" class="eyebrow"></p><h2 id="release-title"></h2><span class="release-rule" aria-hidden="true"></span><p class="eyebrow" data-i18n="listenOn">Listen on</p><div id="release-links" class="release-links"></div><div class="release-stepper"><button id="previous-release" aria-label="Previous recording">←</button><span id="release-position"></span><button id="next-release" aria-label="Next recording">→</button></div></div>
+  </dialog>
+  <dialog id="film-dialog" class="film-dialog" aria-labelledby="projection-title">
+    <button class="dialog-close" data-close aria-label="Close">×</button>
+    <div class="projection-head"><span class="eyebrow" data-i18n="cinema">The cinema</span><h2 id="projection-title"></h2></div>
+    <div id="film-player" class="film-player"></div>
+    <div class="projection-foot"><p data-i18n="failedFilm">If the projection does not start, watch on YouTube.</p><a id="external-film" target="_blank" rel="noopener noreferrer"><span data-i18n="external">Watch on YouTube</span> ↗</a></div>
+  </dialog>
+  <dialog id="credits-dialog" class="credits-dialog" aria-labelledby="credits-title">
+    <button class="dialog-close" data-close aria-label="Close">×</button><p class="eyebrow">GODBITE / MMXXVI</p><h2 id="credits-title" data-i18n="creditsTitle">Behind the signal</h2><p data-i18n="creditsBody">Music, identity and original release artwork belong to Godbite and their credited collaborators. Mir: Artur Ciechorski. JISM and Social Media Girls: Trash Boat.</p>
+  </dialog>
+  <noscript><style>.chapter-stage[hidden]{display:flex!important}.chapter-stage{position:relative!important;min-height:100vh!important}.chapter{height:auto!important}#still-world{opacity:1!important}.main-nav{display:none}.hero-lower{position:relative!important;left:auto!important;bottom:auto!important;padding:2rem}.world{position:fixed}.contact-stage{padding:6rem 2rem!important}</style><div class="noscript-links"><a href="https://godbite.bandcamp.com/">Listen on Bandcamp ↗</a><a href="https://www.youtube.com/godbiteband">Films on YouTube ↗</a><a href="mailto:godbite@gmail.com">godbite@gmail.com</a></div></noscript>
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>

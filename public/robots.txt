@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://horacy.github.io/godbite/sitemap.xml

@@ -1,0 +1,26 @@
+{
+  "name": "godbite-white-forest",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "check": "tsc --noEmit",
+    "build": "npm run check && vite build",
+    "preview": "vite preview --host 127.0.0.1",
+    "test": "playwright test",
+    "assets": "node scripts/prepare-assets.mjs"
+  },
+  "dependencies": {
+    "@fontsource/bodoni-moda": "^5.2.0",
+    "@fontsource/ibm-plex-mono": "^5.2.0",
+    "three": "^0.180.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.56.0",
+    "@types/three": "^0.180.0",
+    "sharp": "^0.35.5",
+    "typescript": "^5.9.0",
+    "vite": "^7.1.0"
+  }
+}
