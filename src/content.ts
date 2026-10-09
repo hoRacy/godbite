@@ -44,7 +44,7 @@ export const copy = {
     creditsTitle: 'Behind the signal', artwork: 'Cover artwork',
     creditsBody: 'Music, identity and original release artwork belong to Godbite and their credited collaborators. Mir: Artur Ciechorski. JISM and Social Media Girls: Trash Boat. A white forest built for Godbite.',
     external: 'Watch on YouTube', mute: 'Turn off ambient sound', unmute: 'Turn on ambient sound',
-    pause: 'Pause motion', resume: 'Resume motion', skip: 'Skip to contact', language: 'Language', unavailable: 'Sound unavailable',
+    pause: 'Pause motion', resume: 'Resume motion', skip: 'Skip to contact', language: 'Language', unavailable: 'Sound unavailable', unavailableState: 'Unavailable',
     loadingFilm: 'Opening the projection…', failedFilm: 'If the projection does not start, watch on YouTube.',
   },
   pl: {
@@ -62,7 +62,7 @@ export const copy = {
     creditsTitle: 'Za sygnałem', artwork: 'Okładka',
     creditsBody: 'Muzyka, tożsamość i oryginalne okładki wydawnictw należą do Godbite i wskazanych współtwórców. Mir: Artur Ciechorski. JISM i Social Media Girls: Trash Boat. Biały las zbudowany dla Godbite.',
     external: 'Oglądaj na YouTube', mute: 'Wyłącz dźwięk tła', unmute: 'Włącz dźwięk tła',
-    pause: 'Zatrzymaj ruch', resume: 'Wznów ruch', skip: 'Przejdź do kontaktu', language: 'Język', unavailable: 'Dźwięk niedostępny',
+    pause: 'Zatrzymaj ruch', resume: 'Wznów ruch', skip: 'Przejdź do kontaktu', language: 'Język', unavailable: 'Dźwięk niedostępny', unavailableState: 'Niedostępny',
     loadingFilm: 'Uruchamianie projekcji…', failedFilm: 'Jeśli projekcja się nie rozpocznie, oglądaj na YouTube.',
   },
 } as const;

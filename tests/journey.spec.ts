@@ -66,7 +66,11 @@ test('sound and motion are opt-in controls',async({page})=>{
   await page.locator('#sound-toggle').click();
   if(audioAvailable)await expect(page.locator('#sound-toggle')).toHaveAttribute('aria-pressed','true');
   else await expect(page.locator('#sound-toggle')).toBeDisabled();
-  await page.locator('#motion-toggle').click();await expect(page.locator('#motion-toggle')).toHaveAttribute('aria-pressed','true');
+  if(await page.locator('body').evaluate(body=>body.classList.contains('still-mode'))){
+    await expect(page.locator('#motion-toggle')).not.toBeVisible();
+  }else{
+    await page.locator('#motion-toggle').click();await expect(page.locator('#motion-toggle')).toHaveAttribute('aria-pressed','true');
+  }
   if(audioAvailable){await page.locator('#sound-toggle').click();await expect(page.locator('#sound-toggle')).toHaveAttribute('aria-pressed','false');}
 });
 test('reduced motion uses actual scene stills with working recording links',async({page})=>{
@@ -94,4 +98,21 @@ test('context loss switches to stills without losing navigation',async({page},te
   await page.locator('#world-canvas').evaluate((canvas:HTMLCanvasElement)=>canvas.getContext('webgl2')!.getExtension('WEBGL_lose_context')!.loseContext());
   await expect(page.locator('body')).toHaveClass(/still-mode/);
   await page.locator('[data-nav=music]').click();await expect(page.locator('#release-dialog')).toBeVisible();
+});
+
+test('missing audio output gives a clear fallback and keeps contact usable',async({page})=>{
+  await page.emulateMedia({reducedMotion:'reduce'});
+  await page.addInitScript(()=>{
+    const Native=window.AudioContext || (window as Window & {webkitAudioContext?: typeof AudioContext}).webkitAudioContext;
+    if(Native)window.AudioContext=class extends Native {
+      get state(): AudioContextState {return 'suspended';}
+      resume(): Promise<void> {return new Promise(()=>{});}
+    };
+  });
+  await page.goto('./');
+  await page.locator('#sound-toggle').click();
+  await expect(page.locator('#sound-toggle')).toBeDisabled();
+  await expect(page.locator('#sound-toggle')).toHaveAttribute('aria-label','Sound unavailable');
+  await page.locator('[data-nav=contact]').click();
+  await expect(page.locator('.contact-address>a')).toBeVisible();
 });

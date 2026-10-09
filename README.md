@@ -35,6 +35,6 @@ Tests cover all recordings and films, lazy media loading, keyboard dialogs, lang
 ## GitHub Pages
 
 The repository is `hoRacy/godbite`, default branch `master`; Vite's base is `/godbite/`.
-Select **Settings → Pages → Source: GitHub Actions**. The included workflow checks and builds pull requests; pushes to master publish `dist` to **https://horacy.github.io/godbite/**. No separate build branch is needed.
+The repository remains private by request. GitHub rejected Pages setup because the current account plan does not support Pages for this private repository. After upgrading the plan, select **Settings → Pages → Source: GitHub Actions**, then **Actions → Publish Godbite → Run workflow**. The workflow checks types, builds and tests all five browser projects. Deployment is skipped cleanly until Pages is enabled; afterwards pushes to master publish `dist` to **https://horacy.github.io/godbite/**. No separate build branch is needed.
 
 The canonical URL, social metadata, sitemap and robots file use that address. Update them and Vite's base together if moving to a custom domain. No secrets, backend, analytics, or third-party scripts are used at startup. YouTube is contacted only after a visitor starts a film. Ambient sound starts only after a visitor enables it.

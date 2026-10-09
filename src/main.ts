@@ -140,7 +140,7 @@ $('#sound-toggle').addEventListener('click',async()=>{
 });
 function updateControls() {
   const text=copy[language];
-  $('#sound-state').textContent=soundUnavailable?text.unavailable:text[soundEnabled?'on':'off'];
+  $('#sound-state').textContent=soundUnavailable?text.unavailableState:text[soundEnabled?'on':'off'];
   $('#sound-toggle').setAttribute('aria-pressed',String(soundEnabled));
   $('#sound-toggle').setAttribute('aria-label',soundUnavailable?text.unavailable:text[soundEnabled?'mute':'unmute']);
   if(soundUnavailable)$('#sound-toggle').setAttribute('aria-disabled','true');
@@ -204,7 +204,7 @@ function navigate(chapter: Chapter, instant=false) {
 }
 document.querySelectorAll<HTMLAnchorElement>('[data-nav]').forEach(anchor=>anchor.addEventListener('click',event=>{
   event.preventDefault();const chapter=anchor.dataset.nav as Chapter;
-  navigate(chapter,chapter==='music');
+  navigate(chapter,true);
   if(chapter==='music')openRelease(0);
 }));
 document.querySelectorAll<HTMLAnchorElement>('[data-journey]').forEach(anchor=>anchor.addEventListener('click',event=>{
@@ -238,6 +238,7 @@ async function startWorld() {
     world=new World({canvas:$<HTMLCanvasElement>('#world-canvas'),onFailure:useStills,onRelease:openRelease});
     stillMode=false;document.body.classList.remove('still-mode');
     world.setProgress(progress());world.setPaused(userPaused);
+    if(selectedFilm.id!==films[0].id)world.selectFilm(selectedFilm.id);
   } catch {useStills();}
 }
 reducedMotion.addEventListener('change',()=>{

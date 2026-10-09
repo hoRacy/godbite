@@ -6,7 +6,25 @@ export class Ambient {
   constructor() { document.addEventListener('visibilitychange', () => this.update()); }
   async toggle() {
     if (!this.context) this.create();
-    if (this.context?.state === 'suspended') await this.context.resume();
+    const context = this.context!;
+    if (context.state !== 'running') {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      try {
+        await Promise.race([
+          context.resume(),
+          new Promise<never>((_, reject) => {
+            timer = setTimeout(() => reject(new Error('Audio output unavailable')), 4000);
+          }),
+        ]);
+        if ((context.state as AudioContextState) !== 'running') throw new Error('Audio output unavailable');
+      } catch (error) {
+        void context.close().catch(() => {});
+        this.context = undefined; this.gain = undefined;
+        throw error;
+      } finally {
+        if (timer) clearTimeout(timer);
+      }
+    }
     this.enabled = !this.enabled; this.update(); return this.enabled;
   }
   setBlocked(blocked: boolean) { this.blocked = blocked; this.update(); }
