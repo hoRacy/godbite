@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { asset, films, releases } from './content';
 import { CinematicLens } from './cinematic';
-import { cameraRoute, activeRecording, forestDoor, interiorLayout, interiorPoint, scenePresence, CAMERA_HEIGHT } from './journey';
+import { cameraRoute, activeRecording, forestDoor, forestTreePosition, interiorLayout, interiorPoint, scenePresence, CAMERA_HEIGHT } from './journey';
 
 const clamp = THREE.MathUtils.clamp;
 const smooth = THREE.MathUtils.smoothstep;
@@ -220,10 +220,11 @@ export class World {
     let branchIndex=0;
     for (let i=0;i<165;i++) {
       let x=(random()-.5)*68;
-      const z=i>=120?-38-random()*38:14-random()*82;
+      let z=i>=120?-38-random()*38:14-random()*82;
       if (Math.abs(x)<4.3) x+=(x<0?-1:1)*(5+random()*5);
       if(z< -28 && Math.abs(x)<17) x+=(x<0?-1:1)*15;
       if(i>=120)x=i%2===0?-8-random()*10:29+random()*10;
+      [x,z]=forestTreePosition(x,z,i);
       const height=8+random()*13, width=.55+random()*1.05;
       object.position.set(x,height/2,z); object.rotation.set((random()-.5)*.055,random()*6,(random()-.5)*.09);
       object.scale.set(width,height,width); object.updateMatrix(); trunks.setMatrixAt(i,object.matrix);
@@ -567,6 +568,7 @@ export class World {
     this.selectedFilm=id;
     const apply=(texture: THREE.Texture)=>{
       for(const screen of this.screens){screen.material.map=texture;screen.material.color.setScalar(1.05);screen.material.needsUpdate=true;}
+      if(this.paused)this.draw();
     };
     const cached=this.filmTextures.get(id);
     if(cached){apply(cached);return;}

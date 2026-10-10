@@ -42,6 +42,28 @@ test('five recordings, latest listening in two clicks and dialog keyboard behavi
   await expect(page.locator('#release-title')).toHaveText('Mir');
   await expect(page.locator('#art-credit')).toContainText('Artur Ciechorski');
 });
+
+for(const reducedMotion of ['no-preference','reduce'] as const){
+ test(`tracklist unfolds beneath the current recording (${reducedMotion})`,async({page})=>{
+  await page.emulateMedia({reducedMotion});await page.goto('./');
+  await page.locator('[data-nav=music]').click();await page.keyboard.press('Escape');
+  await expect(page.locator('.recording-panel')).toHaveCount(0);
+  for(const [index,title,count,first,duration] of [
+   [0,'Social Media Girls',1,'Social Media Girls','08:21'],[1,'JISM',3,'DICK PUMP','07:27'],
+   [2,'Mir',9,"Walkin' Phoenix",'05:28'],[3,'the Aristocrats',9,'David Lynch','05:08'],[4,'You can lead a horse EP',3,'you can lead a horse',''],
+  ] as const){
+   await page.evaluate(index=>{const music=document.getElementById('music')!.offsetTop,cinema=document.getElementById('cinema')!.offsetTop;window.scrollTo({top:music+(cinema-music)*index*.13/.84,behavior:'instant'});},index);
+   const current=page.locator('#release-list>li.is-current');
+   await expect(current.locator('.release-list-title')).toHaveText(title);
+   await expect(current.locator('.release-tracks li')).toHaveCount(count);
+   await expect(current.locator('.track-title').first()).toHaveText(first);
+   await expect(current.locator('.track-duration').first()).toHaveText(duration);
+   await expect(current.locator('.release-track-drawer')).toHaveAttribute('aria-hidden','false');
+   await expect(page.locator('.release-track-drawer[aria-hidden=false]')).toHaveCount(1);
+   if(index===2){await page.waitForTimeout(500);await page.screenshot({path:`test-results/track-drawer-${page.viewportSize()!.width}-${reducedMotion}.png`});}
+  }
+ });
+}
 test('all four films use the right player and closing removes playback',async({page})=>{
   await page.goto('./');await page.locator('[data-nav=cinema]').click();
   await expect(page.locator('.cinema-stage')).toBeVisible();
@@ -52,6 +74,31 @@ test('all four films use the right player and closing removes playback',async({p
     await expect(page.locator('#external-film')).toHaveAttribute('href','https://www.youtube.com/watch?v='+youtube);
     await page.keyboard.press('Escape');await expect(page.locator('iframe')).toHaveCount(0);
   }
+});
+
+test('cinema screen changes for every film while motion is paused',async({page},testInfo)=>{
+ test.skip(testInfo.project.name!=='chrome','Exercise the rendered screen in desktop Chromium.');
+ await page.goto('./');await expect(page.locator('body')).toHaveClass(/scene-ready/);
+ await page.locator('[data-nav=cinema]').click();
+ await page.locator('#motion-toggle').click();await page.waitForTimeout(2000);
+ const viewport=page.viewportSize()!;
+ const clip={x:viewport.width*.4,y:viewport.height*.36,width:viewport.width*.2,height:viewport.height*.18};
+ let previous=await page.screenshot({clip});
+ for(const id of ['walkin-phoenix','tarrare-52','elbow-grease','social-media-girls','walkin-phoenix']){
+  await page.locator('[data-film='+id+']').click();
+  await expect.poll(async()=>!(await page.screenshot({clip})).equals(previous)).toBe(true);
+  previous=await page.screenshot({clip});
+ }
+});
+
+test('static cinema changes to the selected film',async({page})=>{
+ await page.emulateMedia({reducedMotion:'reduce'});await page.goto('./');
+ await page.locator('[data-nav=cinema]').click();
+ for(const id of ['walkin-phoenix','tarrare-52','elbow-grease']){
+  await page.locator('[data-film='+id+']').click();
+  await expect(page.locator('#still-world')).toHaveCSS('background-image',new RegExp('cinema-'+id+'\\.webp'));
+  const response=await page.request.get('images/cinema-'+id+'.webp');expect(response.ok()).toBe(true);
+ }
 });
 test('Polish translation persists and booking stays directly available',async({page})=>{
   await page.goto('./');await page.locator('[data-lang=pl]').click();

@@ -25,6 +25,14 @@ for(const chapter of ['threshold','music','cinema','contact']){
   images.push([chapter,await sharp(Buffer.from(png.split(',')[1],'base64')).resize(1600,1000).webp({quality:82}).toBuffer()]);
   await page.screenshot({path:fileURLToPath(new URL('desktop-'+chapter+'.png',output))});
 }
+await page.evaluate(()=>window.scrollTo({top:document.getElementById('cinema').offsetTop,behavior:'instant'}));
+for(const film of ['walkin-phoenix','tarrare-52','elbow-grease']){
+  await page.locator('[data-film='+film+']').click();
+  await page.waitForTimeout(1800);
+  const png=await page.locator('#world-canvas').evaluate(canvas=>canvas.toDataURL('image/png'));
+  images.push(['cinema-'+film,await sharp(Buffer.from(png.split(',')[1],'base64')).resize(1600,1000).webp({quality:82}).toBuffer()]);
+}
+await page.locator('[data-film=social-media-girls]').click();
 await page.setViewportSize({width:390,height:844});
 for(const chapter of ['threshold','music','cinema','contact']){
   await page.evaluate(id=>window.scrollTo({top:document.getElementById(id).offsetTop,behavior:'instant'}),chapter);

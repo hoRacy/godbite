@@ -43,17 +43,21 @@
         </div>
       </div>
     </section>
-    <section id="music" class="chapter" aria-labelledby="music-title">
+    <section id="music" class="chapter" aria-labelledby="music-label">
       <div class="chapter-stage music-stage" hidden>
-        <div class="chapter-heading"><p class="eyebrow"><span class="red-dot"></span> II / <span data-i18n="music">The ritual</span></p><h2 id="music-title" data-i18n="musicTitle">Five offerings.</h2><p class="section-whisper" data-i18n="musicIntro">Something of us remains in every recording.</p></div>
-        <ol id="release-list" class="release-list" aria-label="Choose a recording"></ol><span class="ritual-line" aria-hidden="true"></span>
+        <div class="chapter-heading"><p class="eyebrow"><span class="red-dot"></span> II / <span id="music-label" data-i18n="music">The ritual</span></p></div>
+        <ol id="release-list" class="release-list" aria-label="Choose a recording"></ol>
       </div>
     </section>
     <section id="cinema" class="chapter" aria-labelledby="cinema-title">
       <div class="chapter-stage cinema-stage" hidden>
         <p class="eyebrow cinema-label"><span class="red-dot"></span> III / <span data-i18n="cinema">The cinema</span></p>
         <button id="cinema-play" class="projection-play"><span class="play-circle" aria-hidden="true">▷</span><span data-i18n="play">Play film</span></button>
-        <div class="cinema-lower"><div><p id="film-kind" class="eyebrow">Official music video</p><h2 id="cinema-title">Social Media Girls</h2></div><div id="film-list" class="film-list" role="group" aria-label="Choose a film"></div></div>
+        <div class="cinema-lower"><div class="cinema-selection"><p id="film-kind" class="eyebrow">Official music video</p><div class="cinema-title-row">
+          <button id="previous-film" class="film-chevron" type="button" aria-label="Previous film"><svg viewBox="0 0 12 20" aria-hidden="true"><path d="M9 3 2 10l7 7"/></svg></button>
+          <h2 id="cinema-title" aria-live="polite">Social Media Girls</h2>
+          <button id="next-film" class="film-chevron" type="button" aria-label="Next film"><svg viewBox="0 0 12 20" aria-hidden="true"><path d="m3 3 7 7-7 7"/></svg></button>
+        </div></div><div id="film-list" class="film-list" role="group" aria-label="Choose a film"></div></div>
       </div>
     </section>
     <section id="contact" class="chapter" aria-labelledby="contact-title">

@@ -3,10 +3,10 @@ import '@fontsource/bodoni-moda/latin-ext-500.css';
 import '@fontsource/ibm-plex-mono/latin-400.css';
 import '@fontsource/ibm-plex-mono/latin-ext-400.css';
 import './style.css';
-import { asset, copy, films, releases, socials } from './content';
+import { asset, copy, films, releases, socials, tracklists } from './content';
 import type { Chapter, Language } from './content';
 import { Ambient } from './ambient';
-import { SCENE_ANCHORS, chapterPresentation } from './journey';
+import { SCENE_ANCHORS, activeRecording, chapterPresentation } from './journey';
 import type { World } from './world';
 
 const $ = <T extends HTMLElement = HTMLElement>(selector: string) => document.querySelector<T>(selector)!;
@@ -18,6 +18,7 @@ const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
 let language: Language = 'en';
 try { if (localStorage.getItem('godbite-language') === 'pl') language = 'pl'; } catch { /* Storage can be unavailable in private browser contexts. */ }
 let selectedRelease = 0;
+let currentRecording = -1;
 let selectedFilm = films[0];
 
 let lastInvoker: HTMLElement | null = null;
@@ -55,9 +56,21 @@ releases.forEach((release,index)=>{
   const number=document.createElement('span'),title=document.createElement('span'),year=document.createElement('span');
   number.className='release-list-no';number.textContent=String(index+1).padStart(2,'0');
   title.className='release-list-title';title.textContent=release.title;
+  title.id='release-label-'+release.id;
   year.className='release-list-year';year.textContent=String(release.year)+' ↗';
   button.dataset.release=release.id;button.append(number,title,year);
-  button.addEventListener('click',()=>openRelease(index));item.append(button);releaseList.append(item);
+  const drawer=document.createElement('div'),inner=document.createElement('div'),tracks=document.createElement('ol');
+  drawer.className='release-track-drawer';drawer.inert=true;drawer.setAttribute('aria-hidden','true');
+  inner.className='release-track-inner';tracks.className='release-tracks';tracks.setAttribute('aria-labelledby',title.id);
+  (tracklists[release.id]??[]).forEach(([name,duration],number)=>{
+    const row=document.createElement('li'),position=document.createElement('span'),label=document.createElement('span'),time=document.createElement('span');
+    position.className='track-number';position.textContent=String(number+1).padStart(2,'0');
+    label.className='track-title';label.textContent=name;
+    time.className='track-duration';time.textContent=duration??'';
+    row.append(position,label,time);tracks.append(row);
+  });
+  inner.append(tracks);drawer.append(inner);
+  button.addEventListener('click',()=>openRelease(index));item.append(button,drawer);releaseList.append(item);
 });
 films.forEach((film,index)=>{
   const button=document.createElement('button'),title=document.createElement('span'),number=document.createElement('span');
@@ -77,6 +90,19 @@ function updateRelease() {
   if(release.spotify)container.append(link('Spotify',release.spotify));
   container.append(link('Bandcamp',release.bandcamp));
   $('#release-position').textContent=String(selectedRelease+1).padStart(2,'0')+' / 05';
+}
+function showRecording(index: number){
+  if(index===currentRecording)return;
+  currentRecording=index;
+  const release=releases[index];
+  document.body.dataset.currentRecording=release.id;
+  releaseList.querySelectorAll('button').forEach((button,item)=>{
+    button.classList.toggle('is-current',item===index);
+    button.parentElement!.classList.toggle('is-current',item===index);
+    const drawer=button.parentElement!.querySelector<HTMLElement>('.release-track-drawer')!;
+    drawer.inert=item!==index;drawer.setAttribute('aria-hidden',String(item!==index));
+    if(item===index)button.setAttribute('aria-current','true');else button.removeAttribute('aria-current');
+  });
 }
 function syncModalState() {
   const open=dialogs.some(dialog=>dialog.open);
@@ -101,6 +127,7 @@ function selectFilm(id: string) {
   $('#film-kind').textContent=copy[language][selectedFilm.kind==='video'?'film':'visualiser'];
   filmList.querySelectorAll('button').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.film===id)));
   world?.selectFilm(id);
+  if(stillMode)updateStill();
 }
 function openFilm(id: string) {
   selectFilm(id);
@@ -112,6 +139,12 @@ function openFilm(id: string) {
   frame.allow='autoplay; encrypted-media; picture-in-picture; fullscreen';frame.allowFullscreen=true;
   frame.referrerPolicy='strict-origin-when-cross-origin';
   $('#film-player').replaceChildren(frame);openDialog(filmDialog);
+}
+for(const [selector,direction] of [['#previous-film',-1],['#next-film',1]] as const){
+  $(selector).addEventListener('click',()=>{
+    const index=films.findIndex(film=>film.id===selectedFilm.id);
+    selectFilm(films[(index+direction+films.length)%films.length].id);
+  });
 }
 dialogs.forEach(dialog=>{
   dialog.querySelector<HTMLButtonElement>('[data-close]')!.addEventListener('click',()=>dialog.close());
@@ -166,6 +199,7 @@ function translate() {
   document.querySelectorAll<HTMLButtonElement>('[data-lang]').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.lang===language)));
   document.querySelector('.language-switch')!.setAttribute('aria-label',text.language);
   releaseList.setAttribute('aria-label',text.selectRelease);filmList.setAttribute('aria-label',text.chooseFilm);
+  $('#previous-film').setAttribute('aria-label',text.previousFilm);$('#next-film').setAttribute('aria-label',text.nextFilm);
   document.querySelectorAll('[data-close]').forEach(button=>button.setAttribute('aria-label',text.close));
   $('#previous-release').setAttribute('aria-label',text.previous);$('#next-release').setAttribute('aria-label',text.next);
   $('#chapter-name').textContent=text[chapterKeys[currentChapter]];
@@ -188,6 +222,11 @@ function progress(){
   return 3;
 }
 let scrollPending=false;
+function updateStill(){
+  const scene=chapters[currentChapter];
+  const image=scene==='cinema'&&selectedFilm.id!==films[0].id?'cinema-'+selectedFilm.id:scene;
+  still.style.backgroundImage='url("'+asset('images/'+image+'.webp')+'")';
+}
 function updateJourney() {
   scrollPending=false;
   const p=progress(),{index,opacity}=chapterPresentation(p);
@@ -207,7 +246,8 @@ function updateJourney() {
     if(anchor.dataset.nav===chapters[index])anchor.setAttribute('aria-current','location');
     else anchor.removeAttribute('aria-current');
   });
-  if(stillMode)still.style.backgroundImage='url("'+asset('images/'+chapters[index]+'.webp')+'")';
+  if(stillMode)updateStill();
+  if(!world)showRecording(activeRecording(p));
   world?.setProgress(p);ambient.setProgress(p);
 }
 function requestJourney() { if(!scrollPending){scrollPending=true;requestAnimationFrame(updateJourney);} }
@@ -260,8 +300,7 @@ async function startWorld() {
     const {World}=await import('./world');
     if(generation!==worldGeneration || reducedMotion.matches)return;
     world=new World({canvas:$<HTMLCanvasElement>('#world-canvas'),onFailure:useStills,onRelease:openRelease,onFilm:()=>openFilm(selectedFilm.id),onRecording:index=>{
-      document.body.dataset.currentRecording=releases[index].id;
-      releaseList.querySelectorAll('button').forEach((button,item)=>button.classList.toggle('is-current',item===index));
+      showRecording(index);
     }});
     stillMode=false;document.body.classList.remove('still-mode');
     world.setProgress(progress());world.setPaused(userPaused);

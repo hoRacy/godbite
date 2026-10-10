@@ -6,6 +6,22 @@ const route=ts.transpileModule(readFileSync(new URL('../src/journey.ts',import.m
  compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ESNext},
 }).outputText.replace(/\bexport /g,'');
 
+test('trees on the gallery exit arc move behind the records and clear both camera routes',async({page})=>{
+ await page.addScriptTag({content:route+'\nwindow.godbiteRoute={forestTreePosition,cameraRoute};'});
+ const trees=await page.evaluate(()=>{
+  const {forestTreePosition,cameraRoute}=(window as any).godbiteRoute;
+  return [[18,-43],[20,-48],[22,-56],[16.5,-60],[22,-64]].map(([x,z],index)=>{
+   const relocated=forestTreePosition(x,z,index);
+   const distance=Math.min(...[false,true].flatMap(mobile=>Array.from({length:2001},(_,i)=>{
+    const point=cameraRoute(i/1000,mobile).position;
+    return Math.hypot(relocated[0]-point[0],relocated[1]-point[2]);
+   })));
+   return {relocated,distance};
+  });
+ });
+ for(const tree of trees){expect(tree.relocated[1]).toBeLessThan(-48);expect(tree.distance).toBeGreaterThan(5.4);}
+});
+
 test('the forest door and first stone stay on the central forward axis',async({page})=>{
  await page.addScriptTag({content:route+'\nwindow.godbiteRoute={cameraRoute,forestDoor};'});
  const result=await page.evaluate(()=>{

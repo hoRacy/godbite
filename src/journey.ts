@@ -82,6 +82,18 @@ export function cameraRoute(progress:number,mobile:boolean){
   target:interiorPoint(interpolate(stops,index,'target',t),mobile),lookAround};
 }
 
+const cameraClearancePoints=[false,true].flatMap(mobile=>
+ Array.from({length:401},(_,index)=>cameraRoute(index/200,mobile).position));
+
+/** Keep trunks, leaning tops and branches outside both viewport routes. */
+export function forestTreePosition(x:number,z:number,index:number):[number,number]{
+ const clear=(a:number,b:number)=>cameraClearancePoints.every(point=>Math.hypot(a-point[0],b-point[2])>5.5);
+ if(clear(x,z))return [x,z];
+ const behindX=-3+(index%7)*3.4,behindZ=-58-(Math.floor(index/7)%4)*3;
+ if(clear(behindX,behindZ))return [behindX,behindZ];
+ return [-9-(index%5)*2,-55-(index%7)*3];
+}
+
 /** Fade both geometry and its lights; never replace a room or its mist in a single frame. */
 export function scenePresence(progress:number){
  return {forest:1-fade(progress,1.76,1.94),gallery:fade(progress,.68,.88)*(1-fade(progress,1.88,2.1)),

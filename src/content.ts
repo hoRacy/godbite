@@ -4,6 +4,13 @@ export interface Release {
   id: string; title: string; year: number; kind: 'album' | 'ep' | 'single';
   cover: string; bandcamp: string; spotify?: string; artwork?: string;
 }
+export const tracklists: Record<string, readonly (readonly [string,string?])[]> = {
+  'social-media-girls': [['Social Media Girls','08:21']],
+  jism: [['DICK PUMP','07:27'],['SHIT MOUTH','06:45'],['CUM RAG','10:01']],
+  mir: [["Walkin' Phoenix",'05:28'],['Toiler','06:14'],['Piecekeeper','08:20'],['The World Beneath the World','07:28'],['Impostor','05:27'],['Elbow Grease','05:01'],['Shibboleth','07:11'],['Pentecost','05:20'],['Tarrare 52','07:00']],
+  'the-aristocrats': [['David Lynch','05:08'],['You Can Lead a Horse','04:28'],['Mothermeat','03:08'],['Camwhore','07:20'],['Bear in Mind','06:20'],['My Home Is Yours','07:00'],["Schrödinger's Scat",'05:29'],['Red Herring','02:00'],['Till the Cows Come Home','04:55']],
+  horse: [['you can lead a horse'],['sedative'],['bear in mind']],
+};
 export interface Film {
   id: string; title: string; youtubeId: string; kind: 'video' | 'visualiser';
 }
@@ -37,7 +44,7 @@ export const copy = {
     musicTitle: 'Five offerings.', musicIntro: 'Something of us remains in every recording.',
     selectRelease: 'Choose a recording', album: 'Album', ep: 'EP', single: 'Single',
     listenOn: 'Listen on', close: 'Close', previous: 'Previous recording', next: 'Next recording',
-    film: 'Official music video', visualiser: 'Official visualiser', chooseFilm: 'Choose a film',
+    film: 'Official music video', visualiser: 'Official visualiser', chooseFilm: 'Choose a film', previousFilm: 'Previous film', nextFilm: 'Next film',
     contactTitle: 'Let it in.', booking: 'Booking / Contact',
     bio: 'Five bodies. An appetite for ritual. Progressive rock and metal from Szczecin, Poland.',
     poem: 'The nets tangle the fingers that wove them.', credits: 'Credits',
@@ -57,7 +64,7 @@ export const copy = {
     musicTitle: 'Pięć ofiar.', musicIntro: 'Coś z nas zostaje w każdym nagraniu.',
     selectRelease: 'Wybierz nagranie', album: 'Album', ep: 'EP', single: 'Singiel',
     listenOn: 'Słuchaj na', close: 'Zamknij', previous: 'Poprzednie nagranie', next: 'Następne nagranie',
-    film: 'Oficjalny teledysk', visualiser: 'Oficjalna wizualizacja', chooseFilm: 'Wybierz film',
+    film: 'Oficjalny teledysk', visualiser: 'Oficjalna wizualizacja', chooseFilm: 'Wybierz film', previousFilm: 'Poprzedni film', nextFilm: 'Następny film',
     contactTitle: 'Wpuść nas.', booking: 'Booking / Kontakt',
     bio: 'Pięć osób. Potrzeba rytuału. Progresywny rock i metal ze Szczecina.',
     poem: 'Sieci plączą palce, którymi były utkane.', credits: 'Autorzy',
