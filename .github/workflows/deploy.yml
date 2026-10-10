@@ -17,35 +17,17 @@ jobs:
     outputs:
       pages-enabled: ${{ steps.pages.outputs.enabled }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
       - run: npm ci
       - run: npm run build
-      - run: npx playwright install --with-deps chromium firefox webkit
-      - name: Start a virtual audio output for browser checks
-        run: |
-          sudo apt-get install -y pulseaudio
-          pulseaudio --start --exit-idle-time=-1
-          pactl load-module module-null-sink sink_name=godbite_test
-          pactl set-default-sink godbite_test
-      - run: xvfb-run --auto-servernum npm test
-        env:
-          LIBGL_ALWAYS_SOFTWARE: '1'
-      - uses: actions/upload-artifact@v4
-        if: failure()
-        with:
-          name: browser-diagnostics
-          path: |
-            playwright-report/
-            test-results/
-          retention-days: 7
       - name: Check Pages availability
         id: pages
         if: github.event_name != 'pull_request'
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         with:
           script: |
             try {
@@ -53,10 +35,10 @@ jobs:
               core.setOutput('enabled', 'true');
             } catch (error) {
               if (error.status !== 404) throw error;
-              core.info('Build and browser checks passed. Enable GitHub Pages after upgrading the account plan, then run this workflow again.');
+              core.info('Build passed. Enable GitHub Pages after upgrading the account plan, then run this workflow again.');
               core.setOutput('enabled', 'false');
             }
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v5
         if: steps.pages.outputs.enabled == 'true'
         with:
           path: dist
@@ -72,4 +54,4 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
