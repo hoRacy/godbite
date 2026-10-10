@@ -6,7 +6,7 @@ import './style.css';
 import { asset, copy, films, releases, socials, tracklists, liveConcert, secretConcert } from './content';
 import type { Chapter, Language } from './content';
 import { Ambient } from './ambient';
-import { SCENE_ANCHORS, activeRecording, chapterPresentation, liveFigureStillBounds } from './journey';
+import { SCENE_ANCHORS, activeRecording, atmospherePresence, chapterPresentation, liveFigureStillBounds } from './journey';
 import type { World } from './world';
 
 const $ = <T extends HTMLElement = HTMLElement>(selector: string) => document.querySelector<T>(selector)!;
@@ -27,7 +27,6 @@ document.addEventListener('click',event=>{
   if(event.target instanceof Element)lastInvoker=event.target.closest<HTMLElement>('a,button');
 },true);
 let currentChapter = 0;
-let userPaused = false;
 let stillMode = false;
 let world: World | undefined;
 let worldGeneration = 0;
@@ -111,7 +110,6 @@ function syncModalState() {
   document.body.classList.toggle('live-playing',livePlaying);
   ambient.setBlocked(filmDialog.open||livePlaying);
   world?.setLivePlaying(livePlaying);
-  world?.setPaused(open||userPaused);
   if(stillMode)updateStill();
 }
 function openDialog(dialog: HTMLDialogElement) {
@@ -210,9 +208,6 @@ function updateControls() {
   toggle.setAttribute('aria-label',unavailable?text.unavailable:text[ambient.requested?'mute':'unmute']);
   toggle.disabled=unavailable;toggle.setAttribute('aria-disabled',String(unavailable));
   const hint=$('#sound-hint');hint.hidden=state!=='waiting';hint.textContent=text.soundHint;
-  $('#motion-toggle').setAttribute('aria-label',text[userPaused?'resume':'pause']);
-  $('#motion-toggle').setAttribute('aria-pressed',String(userPaused));
-  $('#motion-toggle').querySelector('span')!.textContent=userPaused?'▷':'Ⅱ';
 }
 function translate() {
   const text=copy[language];document.documentElement.lang=language;
@@ -263,6 +258,7 @@ function positionSecretFigure(bounds:{x:number;y:number;width:number;height:numb
 function updateJourney() {
   scrollPending=false;
   const p=progress(),{index,opacity}=chapterPresentation(p);
+  document.body.style.setProperty('--atmosphere-presence',String(atmospherePresence(p)));
   stages.forEach((stage,i)=>{
     const hidden=i!==index||opacity<.001;
     stage.hidden=hidden;stage.inert=hidden;
@@ -311,10 +307,6 @@ function onHash() {
   if(chapters.includes(hash))navigate(hash,true);
 }
 addEventListener('hashchange',onHash);
-$('#motion-toggle').addEventListener('click',()=>{
-  userPaused=!userPaused;document.body.classList.toggle('motion-paused',userPaused);
-  syncModalState();updateControls();
-});
 
 const projection=$('#cinema-play');
 projection.addEventListener('pointerenter',()=>world?.setFilmHovered(true));
@@ -342,7 +334,7 @@ async function startWorld() {
       showRecording(index);
     }});
     stillMode=false;document.body.classList.remove('still-mode');
-    world.setProgress(progress());world.setPaused(userPaused);
+    world.setProgress(progress());
     world.setLivePlaying(Boolean($('#live-screen-player').childElementCount));
     if(selectedFilm.id!==films[0].id)world.selectFilm(selectedFilm.id);
   } catch {useStills();}

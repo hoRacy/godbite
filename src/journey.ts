@@ -9,6 +9,8 @@ export const SCENE_ANCHORS=[0,RECORD_STOPS[0],2,3,4] as const;
 export const DOOR_CROSSINGS=[.9,1.9] as const;
 export const SCREEN_CROSSING=2.6;
 export const CAMERA_HEIGHT=3.5;
+// Clear the atmosphere before the final chapter's text appears.
+export const atmospherePresence=(p:number)=>1-fade(p,3.48,3.65);
 export const liveFigurePosition=(mobile:boolean):Point=>[mobile?6.6:13,0,-4.5];
 
 /** Follow background-size:cover so the secret remains aligned with the captured silhouette. */

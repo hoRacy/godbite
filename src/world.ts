@@ -1,44 +1,18 @@
 import * as THREE from 'three';
 import { asset, films, releases, liveConcert } from './content';
-import { CinematicLens } from './cinematic';
-import { cameraRoute, activeRecording, forestDoor, forestTreePosition, interiorLayout, interiorPoint, scenePresence, CAMERA_HEIGHT, liveFigurePosition } from './journey';
+import { CinematicLens, type PortalGlow } from './cinematic';
+import { cameraRoute, activeRecording, atmospherePresence, forestDoor, forestTreePosition, interiorLayout, interiorPoint, scenePresence, CAMERA_HEIGHT, liveFigurePosition } from './journey';
 
 const clamp = THREE.MathUtils.clamp;
 const smooth = THREE.MathUtils.smoothstep;
 let seed = 17;
 function random() { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; }
-const fogVertex = /* glsl */ `
+const surfaceVertex = /* glsl */ `
   varying vec2 vUv;
-  varying vec3 vMistPosition;
-  varying float vMistDepth;
   #include <fog_pars_vertex>
   void main(){
     vUv=uv;vec4 mvPosition=modelViewMatrix*vec4(position,1.);gl_Position=projectionMatrix*mvPosition;
-    vMistPosition=(modelMatrix*vec4(position,1.)).xyz;
-    vMistDepth=-mvPosition.z;
     #include <fog_vertex>
-  }
-`;
-const fogFragment = /* glsl */ `
-  uniform float uTime, uPresence, uPhase; uniform vec3 uColor; uniform float uOpacity;
-  varying vec2 vUv; varying vec3 vMistPosition; varying float vMistDepth;
-  float hash(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453123);}
-  float noise(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);return mix(mix(hash(i),hash(i+vec2(1,0)),f.x),mix(hash(i+vec2(0,1)),hash(i+vec2(1,1)),f.x),f.y);}
-  void main(){
-    // World-space flow keeps cloud detail continuous as the camera crosses a layer.
-    vec2 p=vMistPosition.xy*vec2(.12,.22)+vMistPosition.z*vec2(.035,.018);
-    p+=vec2(uTime*.018,-uTime*.009)+uPhase;
-    vec2 warp=vec2(noise(p*.65+2.3),noise(p*.65-4.7))-.5;
-    p+=warp*.7;
-    float n=noise(p)*.6+noise(p*2.1+3.7)*.25+noise(p*4.4-1.9)*.15;
-    // An irregular oval fades out well before the rectangular mesh boundary.
-    vec2 centered=(vUv-.5)*2.;
-    float radius=length(centered);
-    float edge=1.-smoothstep(.28,.98,radius+warp.x*.12);
-    edge*=smoothstep(0.,.16,vUv.x)*smoothstep(0.,.16,1.-vUv.x);
-    edge*=smoothstep(0.,.16,vUv.y)*smoothstep(0.,.16,1.-vUv.y);
-    float crossing=smoothstep(.4,4.,vMistDepth);
-    gl_FragColor=vec4(uColor,edge*smoothstep(.18,.8,n)*uOpacity*uPresence*crossing);
   }
 `;
 const waterFragment = /* glsl */ `
@@ -64,6 +38,34 @@ const dustVertex = /* glsl */ `
 const dustFragment = /* glsl */ `
   varying float vAlpha;
   void main(){float r=length(gl_PointCoord-.5);gl_FragColor=vec4(.67,.72,.82,(1.-smoothstep(.1,.5,r))*vAlpha);}
+`;
+
+const clubDustVertex = /* glsl */ `
+  uniform float uTime; attribute float aPhase;
+  varying float vAlpha, vWarm;
+  void main(){
+    vec3 p=position;
+    float phase=aPhase*6.2831853;
+    p.x+=sin(uTime*.12+phase+p.z*.14)*.38;
+    p.z+=cos(uTime*.09+phase+p.x*.18)*.3;
+    // Slow upward drift wraps invisibly at the floor and ceiling.
+    p.y=mod(p.y+uTime*(.035+aPhase*.025),8.);
+    float edge=smoothstep(.2,1.,p.y)*(1.-smoothstep(6.8,7.8,p.y));
+    vec4 mv=modelViewMatrix*vec4(p,1.);gl_Position=projectionMatrix*mv;
+    gl_PointSize=clamp(55./max(-mv.z,1.),1.4,4.);
+    float glint=.65+.35*sin(uTime*.4+phase);
+    vAlpha=edge*glint*.42*clamp(1.-(-mv.z)/48.,0.,1.);
+    vWarm=1.-smoothstep(-8.,4.,p.x);
+  }
+`;
+const clubDustFragment = /* glsl */ `
+  uniform float uPresence; varying float vAlpha, vWarm;
+  void main(){
+    float r=length(gl_PointCoord-.5);
+    float speck=exp(-r*r*26.)*(1.-smoothstep(.35,.5,r));
+    vec3 color=mix(vec3(.62,.73,.87),vec3(.96,.76,.56),vWarm);
+    gl_FragColor=vec4(color,speck*vAlpha*uPresence);
+  }
 `;
 
 const threadVertex = /* glsl */ `
@@ -128,6 +130,7 @@ export class World {
   private forestVeil = new THREE.MeshBasicMaterial({color:'#130409',transparent:true,opacity:.84,depthWrite:false});
   private aperture = new THREE.Group();
   private exitGate = new THREE.Group();
+  private portalGlows: PortalGlow[] = [{object:this.aperture,presence:0},{object:this.exitGate,presence:0}];
   private fadeMaterials = new Map<THREE.Group,Map<THREE.Material,number>>();
   private fadeLights = new Map<THREE.Group,Map<THREE.Light,number>>();
   private activeRecord = -1;
@@ -144,7 +147,6 @@ export class World {
   private drumVisibility=1;
   private secretFigure=new THREE.Group();
   private signal = new THREE.Group();
-  private fogMaterials: THREE.ShaderMaterial[] = [];
   private timeMaterials: THREE.ShaderMaterial[] = [];
   private screens: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>[] = [];
   private screenFrame!: THREE.Mesh;
@@ -275,15 +277,8 @@ export class World {
     const inside=new THREE.Mesh(new THREE.PlaneGeometry(2.4,6.9),this.forestVeil);
     inside.position.set(0,3.45,-.04);this.aperture.add(inside);
     this.forest.add(this.aperture);
-    for(let i=0;i<7;i++){
-      const mist=new THREE.Mesh(new THREE.PlaneGeometry(60,8),this.fogMaterial('#737d8a',.5));
-      mist.position.set((random()-.5)*12,1.3+random()*2,4-i*11);this.forest.add(mist);
-    }
-    // Suspended shafts are lit geometry; no expensive full-screen volumetric ray march.
-    for(let i=0;i<5;i++){
-      const shaft=new THREE.Mesh(new THREE.PlaneGeometry(3,25),this.fogMaterial('#8e9aaf',.12));
-      shaft.position.set(-23+i*12,9,-15-i*6);shaft.rotation.z=.18;this.forest.add(shaft);
-    }
+    // Preserve the scenery's seed sequence after removing the seven mist cards.
+    for(let i=0;i<21;i++)random();
   }
 
   private groundTexture(){
@@ -390,23 +385,11 @@ export class World {
     }
     const top=new THREE.Mesh(new THREE.BoxGeometry(2.55,.045,.07),frameMaterial);
     top.position.set(0,7,0);group.add(top);
-    const haze=new THREE.Mesh(new THREE.PlaneGeometry(7,11),this.fogMaterial('#e10a28',.44));
-    haze.position.set(0,4,-.3);group.add(haze);
-
-  }
-
-  private fogMaterial(color: string, opacity: number) {
-    const material=new THREE.ShaderMaterial({
-      vertexShader:fogVertex, fragmentShader:fogFragment,
-      uniforms:{uTime:{value:0},uPresence:{value:1},uPhase:{value:this.fogMaterials.length*2.399963},uColor:{value:new THREE.Color(color)},uOpacity:{value:opacity}},
-      transparent:true,depthWrite:false,side:THREE.DoubleSide,
-    });
-    this.fogMaterials.push(material);return material;
   }
 
   private makeRitual() {
     const water=new THREE.Mesh(new THREE.PlaneGeometry(110,160),new THREE.ShaderMaterial({
-      vertexShader:fogVertex,fragmentShader:waterFragment,
+      vertexShader:surfaceVertex,fragmentShader:waterFragment,
       uniforms:THREE.UniformsUtils.merge([THREE.UniformsLib.fog,{uTime:{value:0},uPresence:{value:1}}]),
       transparent:true,depthWrite:false,side:THREE.DoubleSide,fog:true,
     }));
@@ -441,10 +424,6 @@ export class World {
     const fill=new THREE.SpotLight('#a7b4c5',780,38,.85,1,1.5);
     fill.position.set(10,12,9);fill.target.position.set(0,3,-2);this.ritual.add(fill,fill.target);
     this.makeFireflies();
-    for(let i=0;i<3;i++){
-      const mist=new THREE.Mesh(new THREE.PlaneGeometry(65,6),this.fogMaterial('#737d8a',.24));
-      mist.position.set(0,2,6-i*7);this.ritual.add(mist);
-    }
   }
 
   private makeSigil(index: number) {
@@ -536,10 +515,6 @@ export class World {
     const beamMaterial=new THREE.MeshBasicMaterial({color:'#91a0b3',transparent:true,opacity:.009,side:THREE.DoubleSide,depthWrite:false,blending:THREE.AdditiveBlending});
     const beam=new THREE.Mesh(new THREE.CylinderGeometry(.05,8.5,28,24,1,true),beamMaterial);
     beam.position.set(0,7,14);beam.rotation.x=Math.PI/2;this.cinema.add(beam);
-    for(let i=0;i<3;i++){
-      const mist=new THREE.Mesh(new THREE.PlaneGeometry(33,10),this.fogMaterial('#667388',.08));
-      mist.position.set(0,6,6+i*5);this.cinema.add(mist);
-    }
     return beam;
   }
 
@@ -604,11 +579,29 @@ export class World {
     const fill=new THREE.SpotLight('#d79a67',900,45,1,1,1.45);fill.position.set(-5,8,17);fill.target.position.set(0,1,0);this.live.add(fill,fill.target);
     const screenLight=new THREE.PointLight('#7d8eaf',180,30,1.65);screenLight.position.set(0,5,0);this.live.add(screenLight);
     const red=new THREE.PointLight('#a12529',180,30,1.6);red.position.set(12,3,12);this.live.add(red);
-    for(let i=0;i<5;i++){
-      const mist=new THREE.Mesh(new THREE.PlaneGeometry(32,8),this.fogMaterial(i%2?'#716454':'#72808b',.18));mist.position.set(0,3,4+i*5);this.live.add(mist);
-    }
     const litter=new THREE.InstancedMesh(new THREE.BoxGeometry(.12,.2,.1),new THREE.MeshStandardMaterial({color:'#73695b',roughness:.9}),70),object=new THREE.Object3D();
     for(let i=0;i<70;i++){object.position.set((random()-.5)*28,.08,7+random()*30);object.rotation.set(random()*2,random()*6,random());object.updateMatrix();litter.setMatrixAt(i,object.matrix);}this.live.add(litter);
+    this.makeClubDust();
+  }
+
+  private makeClubDust(){
+    let dustSeed=93;
+    const dustRandom=()=>{dustSeed=(dustSeed*16807)%2147483647;return (dustSeed-1)/2147483646;};
+    const count=240,positions=new Float32Array(count*3),phases=new Float32Array(count);
+    for(let i=0;i<count;i++){
+      positions[i*3]=(dustRandom()-.5)*27;positions[i*3+1]=dustRandom()*8;
+      positions[i*3+2]=2+dustRandom()*32;phases[i]=dustRandom();
+    }
+    const geometry=new THREE.BufferGeometry();
+    geometry.setAttribute('position',new THREE.BufferAttribute(positions,3));
+    geometry.setAttribute('aPhase',new THREE.BufferAttribute(phases,1));
+    const material=new THREE.ShaderMaterial({
+      vertexShader:clubDustVertex,fragmentShader:clubDustFragment,
+      uniforms:{uTime:{value:0},uPresence:{value:1}},
+      transparent:true,depthWrite:false,blending:THREE.AdditiveBlending,
+    });
+    const dust=new THREE.Points(geometry,material);dust.name='club-dust';dust.frustumCulled=false;
+    this.timeMaterials.push(material);this.live.add(dust);
   }
 
   private makeDrums(){
@@ -721,9 +714,8 @@ export class World {
       thread.frustumCulled=false;
       this.timeMaterials.push(material);this.signal.add(thread);
     }
-    const blade=new THREE.Mesh(new THREE.PlaneGeometry(.065,20),new THREE.MeshBasicMaterial({color:'#dc2442',toneMapped:false}));
+    const blade=new THREE.Mesh(new THREE.PlaneGeometry(20,.065),new THREE.MeshBasicMaterial({color:'#dc2442',toneMapped:false}));
     blade.position.set(0,CAMERA_HEIGHT,-13);this.signal.add(blade);
-    const mist=new THREE.Mesh(new THREE.PlaneGeometry(25,25),this.fogMaterial('#cb0730',.19));mist.position.set(0,CAMERA_HEIGHT,-13.2);this.signal.add(mist);
   }
 
   private makeDust() {
@@ -852,6 +844,7 @@ export class World {
     fog.color.copy(this.scene.background as THREE.Color);
     fog.density=THREE.MathUtils.lerp(.061,.019,smooth(p,1.76,2.04))*(1+Math.sin(this.timer*.12)*.035);
     fog.density+=.012*presence.live;
+    fog.density*=atmospherePresence(p);
     this.whiteLight.intensity=620*forestFade*(.64+breath*.48);
     this.whiteLight.target.position.set(Math.sin(this.timer*.085)*12,3,-27+Math.sin(this.timer*.12)*4);
     this.redLight.intensity=150*forestFade*breath;
@@ -902,7 +895,9 @@ export class World {
     const signalLight=new THREE.Vector3().fromArray(interiorPoint([layout.cinemaX,CAMERA_HEIGHT,layout.signalZ-13],mobile));
     const liveLight=new THREE.Vector3().fromArray(interiorPoint([layout.cinemaX,5,layout.liveZ],mobile));
     light.lerp(galleryLight,smooth(p,.65,.88)).lerp(cinemaLight,smooth(p,1.68,1.96)).lerp(liveLight,smooth(p,2.55,2.95)).lerp(signalLight,smooth(p,3.5,3.85));
-    this.lens.render(this.scene,this.camera,this.timer,p,light,breath);
+    this.portalGlows[0].presence=presence.forest;
+    this.portalGlows[1].presence=presence.cinemaDoor;
+    this.lens.render(this.scene,this.camera,this.timer,p,light,breath,this.portalGlows);
   }
   private render=(now: number)=>{
     if(this.stopped)return;
@@ -924,7 +919,7 @@ export class World {
       this.pointer.lerp(this.paused?new THREE.Vector2():this.pointerTarget,Math.min(delta*2,1));
     }
     if(!this.paused)this.timer+=delta;
-    for(const material of [...this.fogMaterials,...this.timeMaterials])material.uniforms.uTime.value=this.timer;
+    for(const material of this.timeMaterials)material.uniforms.uTime.value=this.timer;
     this.draw();
     document.body.classList.add('scene-ready');
     if(!this.capture && !this.paused && !this.hasMeasured && this.timer>2){

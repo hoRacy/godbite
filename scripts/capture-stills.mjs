@@ -27,12 +27,10 @@ async function capturePlaying(name){
   images.push([name,await sharp(Buffer.from(png.split(',')[1],'base64')).webp({quality:82}).toBuffer()]);
   await page.screenshot({path:fileURLToPath(new URL(name+'.png',output))});
   await page.locator('#live-stop').click();await page.waitForTimeout(1800);
-  await page.locator('#motion-toggle').click();
 }
 for(const chapter of chapters){
   await page.evaluate(id=>{document.documentElement.style.scrollBehavior='auto';window.scrollTo({top:document.getElementById(id).offsetTop,behavior:'instant'});},chapter);
   await page.waitForTimeout(1800);
-  if(chapter==='live')await page.locator('#motion-toggle').click();
   const png=await page.locator('#world-canvas').evaluate(canvas=>canvas.toDataURL('image/png'));
   images.push([chapter,await sharp(Buffer.from(png.split(',')[1],'base64')).resize(1600,1000).webp({quality:82}).toBuffer()]);
   await page.screenshot({path:fileURLToPath(new URL('desktop-'+chapter+'.png',output))});
@@ -53,7 +51,6 @@ for(const chapter of chapters){
   await page.evaluate(id=>window.scrollTo({top:document.getElementById(id).offsetTop,behavior:'instant'}),chapter);
   await page.waitForTimeout(1300);
   if(chapter==='live'){
-    await page.locator('#motion-toggle').click();
     const png=await page.locator('#world-canvas').evaluate(canvas=>canvas.toDataURL('image/png'));
     images.push(['live-mobile',await sharp(Buffer.from(png.split(',')[1],'base64')).webp({quality:82}).toBuffer()]);
   }

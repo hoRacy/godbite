@@ -145,39 +145,47 @@ for(const reducedMotion of ['no-preference','reduce'] as const){
  });
 }
 
-test('drums fade during screen playback and return even with world motion paused',async({page},testInfo)=>{
+test('drums fade during screen playback and return while the world keeps moving',async({page},testInfo)=>{
  test.skip(testInfo.project.name!=='chrome','Compare the rendered drum kit in desktop Chromium.');
  await page.goto('./');await expect(page.locator('body')).toHaveClass(/scene-ready/);
  await page.locator('[data-nav=live]').click();await page.waitForTimeout(2000);
- await page.locator('#motion-toggle').click();await page.waitForTimeout(1000);
  const screen=await page.locator('#live-screen-player').boundingBox(),viewport=page.viewportSize()!;
  const clip={x:viewport.width*.44,y:Math.ceil(screen!.y+screen!.height)+2,width:viewport.width*.12,height:viewport.height*.045};
  const resolution=await page.locator('#world-canvas').evaluate((canvas:HTMLCanvasElement)=>[canvas.width,canvas.height]);
  const before=await page.screenshot({clip,path:testInfo.outputPath('drums-before.png')});
  await page.locator('#live-play').click();await page.waitForTimeout(1600);
  const playing=await page.screenshot({clip,path:testInfo.outputPath('drums-playing.png')});expect(playing.equals(before)).toBe(false);
- await page.waitForTimeout(300);expect((await page.screenshot({clip})).equals(playing)).toBe(true);
  await page.locator('#live-stop').click();await page.waitForTimeout(1600);
  expect(await page.locator('#world-canvas').evaluate((canvas:HTMLCanvasElement)=>[canvas.width,canvas.height])).toEqual(resolution);
  const restored=await page.screenshot({clip,path:testInfo.outputPath('drums-restored.png')});
- const [originalPixels,playingPixels,restoredPixels]=await Promise.all([before,playing,restored].map(image=>sharp(image).raw().toBuffer()));
- const difference=(pixels:Buffer)=>originalPixels.reduce((sum,value,index)=>sum+Math.abs(value-pixels[index]),0)/originalPixels.length;
- // Allow tiny changes in translucent chrome rendering while requiring the kit to return visibly.
- expect(difference(restoredPixels)).toBeLessThan(3);
- expect(difference(restoredPixels)).toBeLessThan(difference(playingPixels)*.35);
+ // Compare kit contours rather than the moving fog and light behind them.
+ const frames=await Promise.all([before,playing,restored].map(image=>sharp(image).resize({width:76}).greyscale().raw().toBuffer({resolveWithObject:true})));
+ const contours=frames.map(({data,info:{width,height}})=>{
+  const edges:number[]=[];
+  for(let y=1;y<height-1;y++)for(let x=1;x<width-1;x++){
+   const i=y*width+x;edges.push(data[i+1]-data[i-1],data[i+width]-data[i-width]);
+  }
+  return edges;
+ });
+ const difference=(edges:number[])=>contours[0].reduce((sum,value,index)=>sum+Math.abs(value-edges[index]),0)/contours[0].length;
+ expect(difference(contours[1])).toBeGreaterThan(4);
+ expect(difference(contours[2])).toBeLessThan(difference(contours[1])*.75);
 });
 
-test('cinema screen changes for every film while motion is paused',async({page},testInfo)=>{
+test('cinema screen changes for every film while motion continues',async({page},testInfo)=>{
  test.skip(testInfo.project.name!=='chrome','Exercise the rendered screen in desktop Chromium.');
  await page.goto('./');await expect(page.locator('body')).toHaveClass(/scene-ready/);
  await page.locator('[data-nav=cinema]').click();
- await page.locator('#motion-toggle').click();await page.waitForTimeout(2000);
+ await page.waitForTimeout(2000);
  const viewport=page.viewportSize()!;
  const clip={x:viewport.width*.4,y:viewport.height*.36,width:viewport.width*.2,height:viewport.height*.18};
  let previous=await page.screenshot({clip});
  for(const id of ['walkin-phoenix','tarrare-52','elbow-grease','social-media-girls','walkin-phoenix']){
   await page.locator('[data-film='+id+']').click();
-  await expect.poll(async()=>!(await page.screenshot({clip})).equals(previous)).toBe(true);
+  await expect.poll(async()=>{
+   const [before,after]=await Promise.all([previous,await page.screenshot({clip})].map(image=>sharp(image).raw().toBuffer()));
+   return before.reduce((sum,value,index)=>sum+Math.abs(value-after[index]),0)/before.length;
+  }).toBeGreaterThan(5);
   previous=await page.screenshot({clip});
  }
 });
@@ -203,7 +211,7 @@ test('Polish translation persists and booking stays directly available',async({p
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
   await page.locator('[data-lang=en]').click();await expect(page.locator('#contact-title')).toHaveText('Let it in.');
 });
-test('ambient starts with interaction, stays muted by choice, and motion can pause',async({page})=>{
+test('ambient starts with interaction and stays muted by choice',async({page})=>{
   await page.goto('./');
   const audioAvailable=await page.evaluate(()=>Boolean(window.AudioContext || (window as any).webkitAudioContext));
   if(audioAvailable){
@@ -221,11 +229,7 @@ test('ambient starts with interaction, stays muted by choice, and motion can pau
     await page.keyboard.press('Escape');
     await expect(page.locator('body')).toHaveAttribute('data-sound','playing');
   }else await expect(page.locator('#sound-toggle')).toBeDisabled();
-  if(await page.locator('body').evaluate(body=>body.classList.contains('still-mode'))){
-    await expect(page.locator('#motion-toggle')).not.toBeVisible();
-  }else{
-    await page.locator('#motion-toggle').click();await expect(page.locator('#motion-toggle')).toHaveAttribute('aria-pressed','true');
-  }
+  await expect(page.locator('#motion-toggle')).toHaveCount(0);
 });
 for(const interaction of ['pointermove','pointerdown','pointerup','wheel','scroll','touchstart','touchmove','touchend','click','keydown']){
   test(`ambient attempts to start on ${interaction}`,async({page})=>{
@@ -338,4 +342,25 @@ test('missing audio output gives a clear fallback and keeps contact usable',asyn
   await expect(page.locator('#sound-toggle')).toHaveAttribute('aria-label','Sound unavailable');
   await page.locator('[data-nav=contact]').click();
   await expect(page.locator('.contact-address>a')).toBeVisible();
+});
+
+test('final chapter clears atmospheric haze and Credits leaves the world animated',async({page},testInfo)=>{
+ test.skip(testInfo.project.name!=='chrome','Check the WebGL drawing buffer in desktop Chromium.');
+ // Production normally discards the drawing buffer after presenting each frame.
+ await page.addInitScript(()=>{
+  const original=HTMLCanvasElement.prototype.getContext;
+  HTMLCanvasElement.prototype.getContext=function(type:any,attributes:any){
+   return original.call(this,type,type==='webgl2'?{...attributes,preserveDrawingBuffer:true}:attributes);
+  } as typeof original;
+ });
+ await page.goto('./');await expect(page.locator('body')).toHaveClass(/scene-ready/);
+ await expect(page.locator('#motion-toggle')).toHaveCount(0);
+ await page.locator('[data-nav=contact]').click();
+ await expect(page.locator('body')).toHaveAttribute('data-chapter','contact');
+ await expect.poll(()=>page.locator('body').evaluate(body=>body.style.getPropertyValue('--atmosphere-presence'))).toBe('0');
+ await page.locator('#credits-button').click();await expect(page.locator('#credits-dialog')).toBeVisible();
+ const frame=()=>page.locator('#world-canvas').evaluate((canvas:HTMLCanvasElement)=>canvas.toDataURL());
+ const before=await frame();
+ await expect.poll(async()=>await frame()!==before).toBe(true);
+ await page.keyboard.press('Escape');await expect(page.locator('#credits-dialog')).not.toBeVisible();
 });
