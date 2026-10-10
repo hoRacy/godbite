@@ -333,7 +333,7 @@ test('missing audio output gives a clear fallback and keeps contact usable',asyn
     const Native=window.AudioContext || (window as Window & {webkitAudioContext?: typeof AudioContext}).webkitAudioContext;
     if(Native)window.AudioContext=class extends Native {
       get state(): AudioContextState {return 'suspended';}
-      resume(): Promise<void> {return new Promise(()=>{});}
+      resume(): Promise<void> {return Promise.reject(new DOMException('Audio output unavailable','NotSupportedError'));}
     };
   });
   await page.goto('./');

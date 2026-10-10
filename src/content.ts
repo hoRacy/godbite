@@ -40,7 +40,7 @@ export const socials = [
 export const copy = {
   en: {
     live: 'Live', club: 'The club', liveTitle: 'Godbite @ Jambar', liveKind: 'Live concert', liveIntro: 'An empty room. The sound remains.', playLive: 'Play concert', stopLive: 'Close video', secretFigure: 'A figure in the dark',
-    listen: 'Listen', watch: 'Watch', contact: 'Contact', sound: 'Sound', on: 'On', off: 'Off', soundHint: 'Sound awakens with your first touch.',
+    listen: 'Listen', watch: 'Watch', contact: 'Contact', sound: 'Sound', on: 'On', off: 'Off', soundHint: 'Click once. Let the forest speak.',
     tagline: 'Dependent music / No alternative', hometown: 'Szczecin, Poland', forest: 'You wake in a white forest without windows.',
     follow: 'Follow the red light', latest: 'The latest transmission', play: 'Play film',
     threshold: 'The threshold', music: 'The ritual', cinema: 'The cinema', signal: 'The signal',
@@ -61,7 +61,7 @@ export const copy = {
   },
   pl: {
     live: 'Live', club: 'Klub', liveTitle: 'Godbite @ Jambar', liveKind: 'Koncert na żywo', liveIntro: 'Pusta sala. Dźwięk pozostaje.', playLive: 'Odtwórz koncert', stopLive: 'Zamknij film', secretFigure: 'Postać w mroku',
-    listen: 'Słuchaj', watch: 'Oglądaj', contact: 'Kontakt', sound: 'Dźwięk', on: 'Wł.', off: 'Wył.', soundHint: 'Porusz myszką, przewiń lub dotknij, by obudzić dźwięk. Jeśli nadal jest cisza, kliknij lub naciśnij klawisz.',
+    listen: 'Słuchaj', watch: 'Oglądaj', contact: 'Kontakt', sound: 'Dźwięk', on: 'Wł.', off: 'Wył.', soundHint: 'Kliknij raz. Usłysz, co kryje las.',
     tagline: 'Muzyka zależna / Brak alternatywy', hometown: 'Szczecin, Polska', forest: 'Budzisz się w białym lesie bez okien.',
     follow: 'Idź za czerwonym światłem', latest: 'Najnowsza transmisja', play: 'Odtwórz film',
     threshold: 'Próg', music: 'Rytuał', cinema: 'Kino', signal: 'Sygnał',

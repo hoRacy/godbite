@@ -6,6 +6,22 @@ const route=ts.transpileModule(readFileSync(new URL('../src/journey.ts',import.m
  compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ESNext},
 }).outputText.replace(/\bexport /g,'');
 
+test('retreat moves back on the opening axis, joins smoothly and stays bounded',async({page})=>{
+ await page.addScriptTag({content:route+'\nwindow.godbiteRoute={cameraRoute};'});
+ const frames=await page.evaluate(()=>[false,true].map(mobile=>
+  [-2,-1,-.8,-.4,-.00001,0].map(p=>(window as any).godbiteRoute.cameraRoute(p,mobile))));
+ for(const views of frames){
+  expect(views[0]).toEqual(views[1]);
+  expect(views[1].position[2]-views[5].position[2]).toBe(90);
+  for(let i=1;i<views.length;i++){
+   expect(views[i].position[2]).toBeLessThanOrEqual(views[i-1].position[2]);
+   expect(views[i].target).toEqual(views[5].target);
+   expect(views[i].position[1]).toBe(3.5);
+  }
+  expect(Math.abs(views[4].position[2]-views[5].position[2])).toBeLessThan(1e-10);
+ }
+});
+
 test('trees on the gallery exit arc move behind the records and clear both camera routes',async({page})=>{
  await page.addScriptTag({content:route+'\nwindow.godbiteRoute={forestTreePosition,cameraRoute};'});
  const trees=await page.evaluate(()=>{

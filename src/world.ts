@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { asset, films, releases, liveConcert } from './content';
 import { CinematicLens, type PortalGlow } from './cinematic';
-import { cameraRoute, activeRecording, atmospherePresence, forestDoor, forestTreePosition, interiorLayout, interiorPoint, scenePresence, CAMERA_HEIGHT, liveFigurePosition } from './journey';
+import { cameraRoute, activeRecording, atmospherePresence, forestDoor, forestTreePosition, interiorLayout, interiorPoint, scenePresence, CAMERA_HEIGHT, RETREAT_LIMIT, liveFigurePosition } from './journey';
 
 const clamp = THREE.MathUtils.clamp;
 const smooth = THREE.MathUtils.smoothstep;
@@ -112,6 +112,7 @@ export interface WorldOptions {
   onFailure: () => void;
   onRelease: (index: number) => void;
   onRecording?: (index: number) => void;
+  onRetreat?: (progress: number) => void;
   onFilm?: () => void;
   onLiveScreen?: (bounds:{x:number;y:number;width:number;height:number}) => void;
   onSecretFigure?: (bounds:{x:number;y:number;width:number;height:number}|null) => void;
@@ -158,6 +159,11 @@ export class World {
   private targetProgress = 0;
   private progress = 0;
   private progressVelocity = 0;
+  private secretStarted: number | null = null;
+  private secretFading: number | null = null;
+  private secretFinished?: () => void;
+  private secretReturn?: {started:number;position:THREE.Vector3;rotation:THREE.Quaternion;targetRotation:THREE.Quaternion;done:()=>void};
+  private secretLight = new THREE.PointLight('#bd153a',0,70,1.4);
   private pointer = new THREE.Vector2();
   private pointerTarget = new THREE.Vector2();
   private raycaster = new THREE.Raycaster();
@@ -195,6 +201,7 @@ export class World {
     this.whiteLight.target.position.set(1, 2, -28);
     this.scene.add(this.whiteLight, this.whiteLight.target);
     this.redLight.position.set(0, 3, -24); this.scene.add(this.redLight);
+    this.scene.add(this.secretLight);
     this.scene.add(this.forest,this.interior);
     this.forest.add(this.terrain);
     this.interior.add(this.ritual,this.cinema,this.live,this.signal,this.exitGate);
@@ -268,8 +275,9 @@ export class World {
       }
     }
     this.forest.add(trunks,branches);
-    const ground=new THREE.Mesh(new THREE.PlaneGeometry(100,130),new THREE.MeshStandardMaterial({map:this.groundTexture(),color:'#394039',roughness:1}));
-    ground.rotation.x=-Math.PI/2;ground.position.set(0,-.06,-24);this.terrain.add(ground);
+    const groundMap=this.groundTexture();groundMap.repeat.y*=240/130;
+    const ground=new THREE.Mesh(new THREE.PlaneGeometry(100,240),new THREE.MeshStandardMaterial({map:groundMap,color:'#394039',roughness:1}));
+    ground.rotation.x=-Math.PI/2;ground.position.set(0,-.06,31);this.terrain.add(ground);
     this.makeUndergrowth();
     const door=forestDoor(innerWidth<800);
     this.makeDoor(this.aperture,door.position[0],door.position[2]);
@@ -758,8 +766,31 @@ export class World {
   private selectedFilm='social-media-girls';
   setFilmHovered(hovered:boolean){this.filmHoverControl=hovered;}
 
+  setSecretPlaying(playing: boolean){
+    this.secretStarted=playing?performance.now():null;
+    this.secretFading=null;this.secretFinished=undefined;
+    this.secretReturn=undefined;
+    if(playing){this.targetProgress=this.progress;this.progressVelocity=0;}
+    if(!playing){this.secretLight.intensity=0;this.renderer.toneMappingExposure=.82;}
+  }
+  finishSecretEffect(done: () => void){
+    if(this.secretStarted===null){done();return;}
+    this.secretFading=performance.now();this.secretFinished=done;
+  }
+  beginReturnToStart(done: () => void){
+    const start=cameraRoute(0,innerWidth<800),view=this.camera.clone();
+    view.position.fromArray(start.position);view.lookAt(new THREE.Vector3().fromArray(start.target));
+    this.secretReturn={started:performance.now(),position:this.camera.position.clone(),
+      rotation:this.camera.quaternion.clone(),targetRotation:view.quaternion.clone(),done};
+  }
+  returnToStart(){
+    this.setSecretPlaying(false);
+    this.targetProgress=0;this.progress=0;this.progressVelocity=0;
+    this.pointer.set(0,0);this.pointerTarget.set(0,0);
+  }
   setProgress(progress: number) {
-    this.targetProgress=clamp(progress,0,4);
+    if(this.secretStarted!==null||this.secretReturn)return;
+    this.targetProgress=clamp(progress,RETREAT_LIMIT,4);
     if(this.capture){this.progress=this.targetProgress;this.progressVelocity=0;}
     if(progress>2.25&&!this.liveTextureLoading){
       this.liveTextureLoading=true;
@@ -819,6 +850,7 @@ export class World {
 
   private draw() {
     const p=this.progress,mobile=innerWidth<800,route=cameraRoute(p,mobile);
+    this.options.onRetreat?.(p);
     const layout=interiorLayout(mobile),door=forestDoor(mobile);
     this.interior.position.fromArray(layout.origin);this.interior.rotation.y=layout.rotation;
     this.ritual.position.set(layout.galleryCenterX,0,0);this.ritual.scale.setScalar(layout.scale);
@@ -836,6 +868,27 @@ export class World {
     const target=new THREE.Vector3().fromArray(route.target);
     target.x+=this.pointer.x*.85*route.lookAround;target.y-=this.pointer.y*.45*route.lookAround;
     this.camera.lookAt(target);
+    if(this.secretStarted!==null){
+      const t=(performance.now()-this.secretStarted)/1000;
+      const fade=this.secretFading===null?0:clamp((performance.now()-this.secretFading)/1200,0,1);
+      const strength=1-fade*fade*(3-2*fade);
+      const spinTime=this.secretFading===null?t:(this.secretFading-this.secretStarted)/1000+1.2*(fade-fade*fade/2);
+      this.camera.rotateY(spinTime*18);
+      this.camera.rotateX(Math.sin(t*11)*.65*strength);
+      this.camera.rotateZ(Math.sin(t*7)*.85*strength);
+      const surge=Math.pow(Math.max(0,Math.sin(t*15+Math.sin(t*6)*2)),3);
+      this.secretLight.position.copy(this.camera.position).add(new THREE.Vector3(Math.sin(t*9)*8,2,Math.cos(t*13)*8));
+      this.secretLight.color.set(Math.sin(t*4)>.2?'#71303b':'#53616b');
+      this.secretLight.intensity=(220+surge*1100)*strength;
+      this.renderer.toneMappingExposure=.82+(-.12+surge*.65)*strength;
+    }
+    if(this.secretReturn){
+      const returning=this.secretReturn,t=clamp((performance.now()-returning.started)/2200,0,1);
+      const blend=t*t*t*(10+t*(-15+6*t));
+      const start=cameraRoute(0,mobile);
+      this.camera.position.copy(returning.position).lerp(new THREE.Vector3().fromArray(start.position),blend);
+      this.camera.quaternion.copy(returning.rotation).slerp(returning.targetRotation,blend);
+    }
     const presence=scenePresence(p),forestFade=presence.forest;
     const breath=.68+Math.sin(this.timer*.22)*.17+Math.sin(this.timer*.73+.8)*.095
       +Math.pow(Math.max(0,Math.sin(this.timer*3.1)),8)*.15;
@@ -903,6 +956,14 @@ export class World {
     if(this.stopped)return;
     this.frame=requestAnimationFrame(this.render);
     if(document.hidden)return;
+    if(this.secretFading!==null&&now-this.secretFading>=1200){
+      const done=this.secretFinished;
+      this.setSecretPlaying(false);done?.();
+    }
+    if(this.secretReturn&&now-this.secretReturn.started>=2200){
+      const done=this.secretReturn.done;
+      this.secretReturn=undefined;done();
+    }
     const elapsed=this.lastTime?(now-this.lastTime)/1000:1/60,delta=Math.min(elapsed,.1);this.lastTime=now;
     const settled=Math.abs(this.progress-this.targetProgress)<.0001&&Math.abs(this.progressVelocity)<.0001;
     const drumTarget=this.livePlaying?0:1,drumsSettled=this.drumVisibility===drumTarget;

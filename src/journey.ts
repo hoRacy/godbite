@@ -9,6 +9,8 @@ export const SCENE_ANCHORS=[0,RECORD_STOPS[0],2,3,4] as const;
 export const DOOR_CROSSINGS=[.9,1.9] as const;
 export const SCREEN_CROSSING=2.6;
 export const CAMERA_HEIGHT=3.5;
+export const RETREAT_LIMIT=-1;
+export const RETREAT_TRIGGER=-.8;
 // Clear the atmosphere before the final chapter's text appears.
 export const atmospherePresence=(p:number)=>1-fade(p,3.48,3.65);
 export const liveFigurePosition=(mobile:boolean):Point=>[mobile?6.6:13,0,-4.5];
@@ -89,6 +91,11 @@ function interpolate(stops:Stop[],index:number,key:'position'|'target',t:number)
 const desktopStops=routeStops(false),mobileStops=routeStops(true);
 
 export function cameraRoute(progress:number,mobile:boolean){
+ if(progress<0){
+  const distance=90*Math.pow(clamp(-progress,0,-RETREAT_LIMIT),3);
+  return {position:interiorPoint([0,CAMERA_HEIGHT,64+distance],mobile),
+   target:interiorPoint([0,CAMERA_HEIGHT,0],mobile),lookAround:0};
+ }
  const p=clamp(progress,0,4),stops=mobile?mobileStops:desktopStops;
  // Suppress pointer sway throughout the straight entrances, including their approaches.
  const lookAround=fade(p,1.04,1.16)*(1-fade(p,1.68,1.82));

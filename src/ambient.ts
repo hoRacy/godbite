@@ -91,7 +91,14 @@ export class Ambient {
   private unavailable=false;
   private blocked=false;
   private resuming=false;
+  private lastResume=0;
   private progress=0;
+  private sample?: AudioBuffer;
+  private sampleLoading?: Promise<void>;
+  private sampleGain?: GainNode;
+  private sampleSource?: AudioBufferSourceNode;
+  private samplePending=false;
+  private sampleCallbacks?: {start:()=>void;end:()=>void};
   constructor(private changed: () => void) {
     try{this.enabled=sessionStorage.getItem('godbite-sound')!=='off';}catch{}
     document.addEventListener('visibilitychange',()=>this.update());
@@ -118,8 +125,11 @@ export class Ambient {
   async unlock(){
     if(!this.enabled||this.unavailable||this.context?.state==='running')return;
     if(this.resuming){
-      // A mouse move may leave resume pending until a later activating gesture.
-      if(navigator.userActivation?.isActive)void this.context?.resume().catch(()=>{});
+      // Retry from every kind of interaction, even while an earlier resume waits.
+      if(navigator.userActivation?.isActive||performance.now()-this.lastResume>150){
+        this.lastResume=performance.now();
+        void this.context?.resume().then(()=>this.update()).catch(()=>{});
+      }
       return;
     }
     this.resuming=true;
@@ -127,15 +137,17 @@ export class Ambient {
     try{
       if(!this.context)this.create();
       const context=this.context!;
+      this.lastResume=performance.now();
       await Promise.race([
         context.resume(),
         new Promise<void>((resolve,reject)=>{timeout=setTimeout(()=>{
           if(context.state==='running')resolve();
-          else if(context.state==='suspended' && navigator.userActivation?.hasBeenActive===false){
+          else if(context.state==='suspended'){
             reject(new DOMException('Audio is waiting for browser activation','NotAllowedError'));
           }else reject(new Error('Audio output unavailable'));
         },4000);}),
       ]);
+      if((context.state as AudioContextState)==='suspended')throw new DOMException('Audio is waiting for browser activation','NotAllowedError');
       if((context.state as AudioContextState)!=='running')throw new Error('Audio output unavailable');
       this.update();
     }catch(error){
@@ -147,6 +159,33 @@ export class Ambient {
     }
   }
   setBlocked(blocked: boolean){this.blocked=blocked;this.update();}
+  prepareSample(url: string){
+    if(this.sampleLoading)return this.sampleLoading;
+    this.sampleLoading=(async()=>{
+      try{
+        if(!this.context)this.create();
+        const response=await fetch(url);
+        if(!response.ok)throw new Error('Sample unavailable');
+        this.sample=await this.context!.decodeAudioData(await response.arrayBuffer());
+        this.update();
+      }catch{this.sampleLoading=undefined;this.samplePending=false;}
+    })();
+    return this.sampleLoading;
+  }
+  playSample(callbacks?: {start:()=>void;end:()=>void}){
+    if(!this.enabled||this.unavailable||this.blocked||document.hidden)return false;
+    this.samplePending=true;
+    this.sampleCallbacks=callbacks;
+    void this.unlock();this.update();
+    return true;
+  }
+  cancelSample(){
+    this.samplePending=false;
+    const source=this.sampleSource,callbacks=this.sampleCallbacks;
+    this.sampleSource=undefined;this.sampleCallbacks=undefined;
+    source?.stop();
+    if(source)callbacks?.end();
+  }
   setProgress(progress: number){
     this.progress=progress;
     this.graph?.wind.frequency.setTargetAtTime(330-45*Math.min(progress,4)/4,this.context!.currentTime,2);
@@ -160,6 +199,8 @@ export class Ambient {
     const limiter=context.createDynamicsCompressor();
     limiter.threshold.value=-18;limiter.ratio.value=8;limiter.attack.value=.02;limiter.release.value=.8;
     this.gain.connect(limiter).connect(context.destination);
+    this.sampleGain=context.createGain();this.sampleGain.gain.value=.7;
+    this.sampleGain.connect(context.destination);
     this.graph=createAtmosphere(context,this.gain);
     context.addEventListener('statechange',()=>this.update());
     this.setProgress(this.progress);
@@ -172,6 +213,22 @@ export class Ambient {
   private update(){
     if(this.context && this.gain){
       const audible=this.enabled&&!this.blocked&&!document.hidden&&this.context.state==='running';
+      if(!this.enabled||this.blocked||document.hidden)this.cancelSample();
+      this.sampleGain?.gain.setTargetAtTime(audible?.7:0,this.context.currentTime,.025);
+      if(audible&&this.samplePending&&this.sample&&this.sampleGain){
+        this.samplePending=false;
+        const source=this.context.createBufferSource();source.buffer=this.sample;
+        source.connect(this.sampleGain);this.sampleSource=source;
+        source.onended=()=>{
+          source.disconnect();
+          if(this.sampleSource!==source)return;
+          this.sampleSource=undefined;
+          const callbacks=this.sampleCallbacks;this.sampleCallbacks=undefined;
+          callbacks?.end();
+        };
+        source.start();
+        this.sampleCallbacks?.start();
+      }
       this.gain.gain.setTargetAtTime(audible?.32:0,this.context.currentTime,audible?.65:.055);
     }
     this.changed();

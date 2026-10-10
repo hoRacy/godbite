@@ -6,7 +6,7 @@ import './style.css';
 import { asset, copy, films, releases, socials, tracklists, liveConcert, secretConcert } from './content';
 import type { Chapter, Language } from './content';
 import { Ambient } from './ambient';
-import { SCENE_ANCHORS, activeRecording, atmospherePresence, chapterPresentation, liveFigureStillBounds } from './journey';
+import { SCENE_ANCHORS, RETREAT_LIMIT, RETREAT_TRIGGER, activeRecording, atmospherePresence, chapterPresentation, liveFigureStillBounds } from './journey';
 import type { World } from './world';
 
 const $ = <T extends HTMLElement = HTMLElement>(selector: string) => document.querySelector<T>(selector)!;
@@ -190,12 +190,15 @@ $('#live-stop').addEventListener('click',()=>{stopLive();$('#live-play').focus({
 $('#secret-figure').addEventListener('click',()=>openProjection(secretConcert.title,secretConcert.youtubeId,'club'));
 document.querySelectorAll<HTMLButtonElement>('[data-play]').forEach(button=>button.addEventListener('click',()=>openFilm(button.dataset.play!)));
 $('#sound-toggle').addEventListener('click',()=>{void ambient.toggle();});
+$('#sound-hint').addEventListener('click',()=>{
+  if(!ambient.requested)void ambient.toggle();else void ambient.unlock();
+});
 function awakenSound(event: Event){
   if(event.target instanceof Element && event.target.closest('#sound-toggle') &&
     ['pointerdown','pointerup','touchstart','touchend','click','keydown'].includes(event.type))return;
   void ambient.unlock();
 }
-for(const type of ['pointermove','pointerdown','pointerup','wheel','scroll','touchstart','touchmove','touchend','click','keydown']){
+for(const type of ['pointermove','pointerdown','pointerup','mousemove','mousedown','mouseup','wheel','scroll','touchstart','touchmove','touchend','click','keydown','keyup']){
   document.addEventListener(type,awakenSound,{passive:true,capture:true});
 }
 function updateControls() {
@@ -207,7 +210,12 @@ function updateControls() {
   toggle.setAttribute('aria-pressed',String(ambient.requested));
   toggle.setAttribute('aria-label',unavailable?text.unavailable:text[ambient.requested?'mute':'unmute']);
   toggle.disabled=unavailable;toggle.setAttribute('aria-disabled',String(unavailable));
-  const hint=$('#sound-hint');hint.hidden=state!=='waiting';hint.textContent=text.soundHint;
+  updateSoundInvitation();
+}
+function updateSoundInvitation(){
+  const state=ambient.state,hint=$('#sound-hint');
+  hint.hidden=secretPlaying||!(state==='waiting'||(state==='off'&&retreat<0));
+  if(hint.textContent!==copy[language].soundHint)hint.textContent=copy[language].soundHint;
 }
 function translate() {
   const text=copy[language];document.documentElement.lang=language;
@@ -234,7 +242,31 @@ document.querySelectorAll<HTMLButtonElement>('[data-lang]').forEach(button=>butt
   translate();
 }));
 
+let retreat=0;
+let retreatTriggered=false;
+let secretPlaying=false;
+function resetRetreat(){
+  retreat=0;retreatTriggered=false;
+  secretPlaying=false;delete document.body.dataset.easterEgg;
+  world?.setSecretPlaying(false);
+  ambient.cancelSample();
+  document.body.style.setProperty('--sound-demand','0');
+  updateSoundInvitation();
+}
+addEventListener('wheel',event=>{
+  if(secretPlaying){event.preventDefault();return;}
+  if(stillMode||!world||reducedMotion.matches||scrollY>0||event.ctrlKey||dialogs.some(dialog=>dialog.open))return;
+  if(event.target instanceof Element&&event.target.closest('a,button,input,textarea,select,iframe'))return;
+  if(event.deltaY>=0&&retreat===0)return;
+  event.preventDefault();
+  const pixels=event.deltaY*(event.deltaMode===1?16:event.deltaMode===2?innerHeight:1);
+  retreat=Math.max(RETREAT_LIMIT,Math.min(0,retreat+pixels/2400));
+  if(retreat<0)void ambient.prepareSample(asset('audio/never-should-have-come-here.mp3'));
+  else resetRetreat();
+  requestJourney();
+},{passive:false});
 function progress(){
+  if(scrollY<=0&&retreat<0)return retreat;
   const y=Math.max(0,scrollY);
   for(let index=0;index<sections.length-1;index++){
     const start=sections[index].offsetTop,end=sections[index+1].offsetTop;
@@ -257,6 +289,7 @@ function positionSecretFigure(bounds:{x:number;y:number;width:number;height:numb
 }
 function updateJourney() {
   scrollPending=false;
+  if(scrollY>0&&retreat<0)resetRetreat();
   const p=progress(),{index,opacity}=chapterPresentation(p);
   document.body.style.setProperty('--atmosphere-presence',String(atmospherePresence(p)));
   stages.forEach((stage,i)=>{
@@ -271,20 +304,21 @@ function updateJourney() {
   if(index!==2)world?.setFilmHovered(false);
   $('#chapter-name').textContent=copy[language][chapterKeys[index]];
   $('#chapter-number').textContent=String(index+1).padStart(2,'0');
-  $('#position-fill').style.width=(p/4*100)+'%';
+  $('#position-fill').style.width=(Math.max(0,p)/4*100)+'%';
   document.querySelectorAll<HTMLAnchorElement>('[data-nav]').forEach(anchor=>{
     if(anchor.dataset.nav===chapters[index])anchor.setAttribute('aria-current','location');
     else anchor.removeAttribute('aria-current');
   });
   if(stillMode)updateStill();
   if(!world)showRecording(activeRecording(p));
-  world?.setProgress(p);ambient.setProgress(p);
+  world?.setProgress(p);ambient.setProgress(Math.max(0,p));
 }
 function requestJourney() { if(!scrollPending){scrollPending=true;requestAnimationFrame(updateJourney);} }
 addEventListener('scroll',requestJourney,{passive:true});
 addEventListener('resize',requestJourney,{passive:true});
 
 function navigate(chapter: Chapter, instant=false) {
+  resetRetreat();requestJourney();
   const section=$('#'+chapter);
   history.replaceState(null,'','#'+chapter);
   window.scrollTo({top:section.offsetTop,behavior:instant||reducedMotion.matches?'instant':'smooth'});
@@ -315,6 +349,7 @@ projection.addEventListener('focus',()=>world?.setFilmHovered(true));
 projection.addEventListener('blur',()=>world?.setFilmHovered(false));
 
 function useStills() {
+  resetRetreat();
   for(const key of ['left','top','width','height'])stages[3].style.removeProperty('--live-'+key);
   stillMode=true;document.body.classList.add('still-mode');document.body.classList.remove('scene-ready');
   world?.destroy();world=undefined;
@@ -330,7 +365,33 @@ async function startWorld() {
       const stage=stages[3];
       stage.style.setProperty('--live-left',bounds.x+'px');stage.style.setProperty('--live-top',bounds.y+'px');
       stage.style.setProperty('--live-width',bounds.width+'px');stage.style.setProperty('--live-height',bounds.height+'px');
-    },onSecretFigure:positionSecretFigure,onRecording:index=>{
+    },onSecretFigure:positionSecretFigure,onRetreat:p=>{
+      const demand=(ambient.state==='off'||ambient.state==='waiting')?Math.pow(Math.max(0,-p),3):0;
+      document.body.style.setProperty('--sound-demand',String(demand));
+      updateSoundInvitation();
+      if(retreat<0&&p<=RETREAT_TRIGGER&&!retreatTriggered){
+        retreatTriggered=ambient.playSample({
+          start:()=>{
+            secretPlaying=true;document.body.dataset.easterEgg='playing';
+            world?.setSecretPlaying(true);
+            updateSoundInvitation();
+          },
+          end:()=>{
+            if(!secretPlaying)return;
+            document.body.dataset.easterEgg='fading';
+            const complete=()=>{
+              resetRetreat();world?.returnToStart();
+              window.scrollTo({top:0,behavior:'instant'});requestJourney();
+            };
+            const returnCamera=()=>{
+              document.body.dataset.easterEgg='returning';
+              if(world)world.beginReturnToStart(complete);else complete();
+            };
+            if(world)world.finishSecretEffect(returnCamera);else complete();
+          },
+        });
+      }
+    },onRecording:index=>{
       showRecording(index);
     }});
     stillMode=false;document.body.classList.remove('still-mode');
