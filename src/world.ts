@@ -1,7 +1,7 @@
 import * as THREE from 'three';
-import { asset, films, releases } from './content';
+import { asset, films, releases, liveConcert } from './content';
 import { CinematicLens } from './cinematic';
-import { cameraRoute, activeRecording, forestDoor, forestTreePosition, interiorLayout, interiorPoint, scenePresence, CAMERA_HEIGHT } from './journey';
+import { cameraRoute, activeRecording, forestDoor, forestTreePosition, interiorLayout, interiorPoint, scenePresence, CAMERA_HEIGHT, liveFigurePosition } from './journey';
 
 const clamp = THREE.MathUtils.clamp;
 const smooth = THREE.MathUtils.smoothstep;
@@ -9,21 +9,36 @@ let seed = 17;
 function random() { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; }
 const fogVertex = /* glsl */ `
   varying vec2 vUv;
+  varying vec3 vMistPosition;
+  varying float vMistDepth;
   #include <fog_pars_vertex>
   void main(){
     vUv=uv;vec4 mvPosition=modelViewMatrix*vec4(position,1.);gl_Position=projectionMatrix*mvPosition;
+    vMistPosition=(modelMatrix*vec4(position,1.)).xyz;
+    vMistDepth=-mvPosition.z;
     #include <fog_vertex>
   }
 `;
 const fogFragment = /* glsl */ `
-  uniform float uTime, uPresence; uniform vec3 uColor; uniform float uOpacity; varying vec2 vUv;
+  uniform float uTime, uPresence, uPhase; uniform vec3 uColor; uniform float uOpacity;
+  varying vec2 vUv; varying vec3 vMistPosition; varying float vMistDepth;
   float hash(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453123);}
   float noise(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);return mix(mix(hash(i),hash(i+vec2(1,0)),f.x),mix(hash(i+vec2(0,1)),hash(i+vec2(1,1)),f.x),f.y);}
   void main(){
-    vec2 p=vUv*vec2(5.,2.7)+vec2(uTime*.025,-uTime*.014);
-    float n=noise(p)*.6+noise(p*2.1)*.25+noise(p*4.4)*.15;
-    float edge=sin(vUv.x*3.14159)*sin(vUv.y*3.14159);
-    gl_FragColor=vec4(uColor,pow(edge,1.6)*smoothstep(.22,.75,n)*uOpacity*uPresence);
+    // World-space flow keeps cloud detail continuous as the camera crosses a layer.
+    vec2 p=vMistPosition.xy*vec2(.12,.22)+vMistPosition.z*vec2(.035,.018);
+    p+=vec2(uTime*.018,-uTime*.009)+uPhase;
+    vec2 warp=vec2(noise(p*.65+2.3),noise(p*.65-4.7))-.5;
+    p+=warp*.7;
+    float n=noise(p)*.6+noise(p*2.1+3.7)*.25+noise(p*4.4-1.9)*.15;
+    // An irregular oval fades out well before the rectangular mesh boundary.
+    vec2 centered=(vUv-.5)*2.;
+    float radius=length(centered);
+    float edge=1.-smoothstep(.28,.98,radius+warp.x*.12);
+    edge*=smoothstep(0.,.16,vUv.x)*smoothstep(0.,.16,1.-vUv.x);
+    edge*=smoothstep(0.,.16,vUv.y)*smoothstep(0.,.16,1.-vUv.y);
+    float crossing=smoothstep(.4,4.,vMistDepth);
+    gl_FragColor=vec4(uColor,edge*smoothstep(.18,.8,n)*uOpacity*uPresence*crossing);
   }
 `;
 const waterFragment = /* glsl */ `
@@ -96,6 +111,8 @@ export interface WorldOptions {
   onRelease: (index: number) => void;
   onRecording?: (index: number) => void;
   onFilm?: () => void;
+  onLiveScreen?: (bounds:{x:number;y:number;width:number;height:number}) => void;
+  onSecretFigure?: (bounds:{x:number;y:number;width:number;height:number}|null) => void;
 }
 export class World {
   private renderer: THREE.WebGLRenderer;
@@ -108,7 +125,7 @@ export class World {
   private forest = new THREE.Group();
   private terrain = new THREE.Group();
   private interior = new THREE.Group();
-  private forestVeil = new THREE.MeshBasicMaterial({color:'#130409',transparent:true,opacity:.84});
+  private forestVeil = new THREE.MeshBasicMaterial({color:'#130409',transparent:true,opacity:.84,depthWrite:false});
   private aperture = new THREE.Group();
   private exitGate = new THREE.Group();
   private fadeMaterials = new Map<THREE.Group,Map<THREE.Material,number>>();
@@ -119,6 +136,13 @@ export class World {
   private filmHover = 0;
   private ritual = new THREE.Group();
   private cinema = new THREE.Group();
+  private live = new THREE.Group();
+  private liveScreen!: THREE.Mesh<THREE.PlaneGeometry,THREE.MeshBasicMaterial>;
+  private liveTextureLoading=false;
+  private liveDrums=new THREE.Group();
+  private livePlaying=false;
+  private drumVisibility=1;
+  private secretFigure=new THREE.Group();
   private signal = new THREE.Group();
   private fogMaterials: THREE.ShaderMaterial[] = [];
   private timeMaterials: THREE.ShaderMaterial[] = [];
@@ -163,7 +187,7 @@ export class World {
     this.renderer.toneMappingExposure = .82;
     this.lens = new CinematicLens(this.renderer);
     this.scene.background = new THREE.Color('#020306');
-    this.scene.fog = new THREE.FogExp2('#10131b', .06);
+    this.scene.fog = new THREE.FogExp2('#020306', .06);
     this.scene.add(new THREE.HemisphereLight('#a1acbf', '#030104', .14));
     this.whiteLight.position.set(-12, 20, 8);
     this.whiteLight.target.position.set(1, 2, -28);
@@ -171,15 +195,17 @@ export class World {
     this.redLight.position.set(0, 3, -24); this.scene.add(this.redLight);
     this.scene.add(this.forest,this.interior);
     this.forest.add(this.terrain);
-    this.interior.add(this.ritual,this.cinema,this.signal,this.exitGate);
+    this.interior.add(this.ritual,this.cinema,this.live,this.signal,this.exitGate);
     this.makeForest();
     this.makeRitual();
     const layout=interiorLayout(innerWidth<800);
     this.makeDoor(this.exitGate,layout.cinemaX,layout.exitZ);
     this.beam = this.makeCinema();
+    this.makeLive();
     this.makeSignal();
     this.makeDust();
-    for(const group of [this.forest,this.terrain,this.ritual,this.cinema,this.signal,this.exitGate])this.prepareFade(group);
+    for(const group of [this.forest,this.terrain,this.ritual,this.cinema,this.live,this.signal,this.exitGate])this.prepareFade(group);
+    this.prepareFade(this.liveDrums);
     this.resize();
     addEventListener('resize', this.resize);
     addEventListener('pointermove', this.movePointer, { passive: true });
@@ -372,7 +398,7 @@ export class World {
   private fogMaterial(color: string, opacity: number) {
     const material=new THREE.ShaderMaterial({
       vertexShader:fogVertex, fragmentShader:fogFragment,
-      uniforms:{uTime:{value:0},uPresence:{value:1},uColor:{value:new THREE.Color(color)},uOpacity:{value:opacity}},
+      uniforms:{uTime:{value:0},uPresence:{value:1},uPhase:{value:this.fogMaterials.length*2.399963},uColor:{value:new THREE.Color(color)},uOpacity:{value:opacity}},
       transparent:true,depthWrite:false,side:THREE.DoubleSide,
     });
     this.fogMaterials.push(material);return material;
@@ -517,6 +543,164 @@ export class World {
     return beam;
   }
 
+  private makeLive(){
+    const canvas=document.createElement('canvas');canvas.width=canvas.height=512;
+    const paint=canvas.getContext('2d')!;paint.fillStyle='#383431';paint.fillRect(0,0,512,512);
+    for(let i=0;i<2400;i++){
+      paint.fillStyle=i%3===0?'#17191a':i%3===1?'#55514b':'#272320';
+      paint.fillRect(random()*512,random()*512,1+random()*13,1+random()*38);
+    }
+    for(let i=0;i<25;i++){
+      paint.strokeStyle='#121416';paint.lineWidth=1+random()*2;paint.beginPath();
+      const x=random()*512,y=random()*512;paint.moveTo(x,y);paint.lineTo(x+random()*35,y+80);paint.stroke();
+    }
+    const grime=new THREE.CanvasTexture(canvas);grime.colorSpace=THREE.SRGBColorSpace;grime.wrapS=grime.wrapT=THREE.RepeatWrapping;grime.repeat.set(3,2);
+    const wall=new THREE.MeshStandardMaterial({map:grime,color:'#49433f',roughness:.98});
+    const metal=new THREE.MeshStandardMaterial({color:'#161b1e',roughness:.65,metalness:.6});
+    const box=(x:number,y:number,z:number,w:number,h:number,d:number,material:THREE.Material)=>{
+      const mesh=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),material);mesh.position.set(x,y,z);this.live.add(mesh);return mesh;
+    };
+    box(0,-.14,16,32,.25,54,new THREE.MeshStandardMaterial({map:this.groundTexture(),color:'#3b3530',roughness:.76,metalness:.12}));
+    box(0,5,-5,32,10,.4,wall);box(-16,5,16,.4,10,44,wall);box(16,5,16,.4,10,44,wall);
+    box(0,10,15,32,.4,44,metal);
+    box(0,.42,0,22,.84,8,new THREE.MeshStandardMaterial({map:grime,color:'#282420',roughness:.94}));
+    box(0,.1,5.1,10,.2,2,metal);box(0,.23,4.2,10,.26,1,metal);
+    const frame=box(0,4.4,-3,12.2,6.9,.35,metal);
+    this.liveScreen=new THREE.Mesh(new THREE.PlaneGeometry(11.6,6.525),new THREE.MeshBasicMaterial({color:'#777777'}));
+    this.liveScreen.position.set(0,4.4,frame.position.z+.2);this.live.add(this.liveScreen);
+    // Empty instruments, cables and battered speaker stacks leave the stage ready for a show.
+    const speaker=new THREE.MeshStandardMaterial({color:'#101315',roughness:.97});
+    for(const side of [-1,1]){
+      for(let level=0;level<3;level++){
+        box(side*12.1,1.15+level*1.9,1,2.3,1.85,1.6,speaker);
+        const cone=new THREE.Mesh(new THREE.CircleGeometry(.54,24),metal);cone.position.set(side*12.1,1.15+level*1.9,1.81);this.live.add(cone);
+      }
+      box(side*7,1.6,-.8,2.6,1.6,1.1,speaker);
+      box(side*7,2.55,-.8,2.3,.3,.85,metal);
+      box(side*14.2,1.6,22,2.4,3.2,1.3,metal);
+    }
+    this.makeDrums();this.makeSecretFigure();
+    for(const x of [-4,4]){
+      box(x,2.05,2.5,.035,2.5,.035,metal);box(x,.9,2.5,.8,.04,.6,metal);
+      const mic=box(x,3.35,2.5,.06,.07,.5,metal);mic.rotation.y=.35;
+    }
+    const wire=new THREE.LineBasicMaterial({color:'#090b0d'});
+    for(let i=0;i<9;i++){
+      const points=Array.from({length:24},(_,j)=>new THREE.Vector3((i-4)*1.6+Math.sin(j*.6+i)*.6,.86,j*.17-1));
+      this.live.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(points),wire));
+    }
+    for(const side of [-1,1]){
+      box(side*5,8.3,0,8.8,.16,.18,metal);
+      for(let i=0;i<3;i++){
+        const x=side*(3+i*3.2),color=side<0?'#d13a29':'#658da0';
+        box(x,8,0,.5,.48,.5,metal);
+        const light=new THREE.SpotLight(color,1250,45,.34,.65,1.4);
+        light.position.set(x,7.7,.2);light.target.position.set(x*.25,.7,6+i*3);this.live.add(light,light.target);
+        const direction=light.target.position.clone().sub(light.position);
+        const beam=new THREE.Mesh(new THREE.CylinderGeometry(.09,2.4,direction.length(),20,1,true),new THREE.MeshBasicMaterial({color,transparent:true,opacity:.028,depthWrite:false,side:THREE.DoubleSide,blending:THREE.AdditiveBlending}));
+        beam.position.copy(light.position).add(light.target.position).multiplyScalar(.5);beam.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),direction.normalize().negate());this.live.add(beam);
+      }
+    }
+    const fill=new THREE.SpotLight('#d79a67',900,45,1,1,1.45);fill.position.set(-5,8,17);fill.target.position.set(0,1,0);this.live.add(fill,fill.target);
+    const screenLight=new THREE.PointLight('#7d8eaf',180,30,1.65);screenLight.position.set(0,5,0);this.live.add(screenLight);
+    const red=new THREE.PointLight('#a12529',180,30,1.6);red.position.set(12,3,12);this.live.add(red);
+    for(let i=0;i<5;i++){
+      const mist=new THREE.Mesh(new THREE.PlaneGeometry(32,8),this.fogMaterial(i%2?'#716454':'#72808b',.18));mist.position.set(0,3,4+i*5);this.live.add(mist);
+    }
+    const litter=new THREE.InstancedMesh(new THREE.BoxGeometry(.12,.2,.1),new THREE.MeshStandardMaterial({color:'#73695b',roughness:.9}),70),object=new THREE.Object3D();
+    for(let i=0;i<70;i++){object.position.set((random()-.5)*28,.08,7+random()*30);object.rotation.set(random()*2,random()*6,random());object.updateMatrix();litter.setMatrixAt(i,object.matrix);}this.live.add(litter);
+  }
+
+  private makeDrums(){
+    const kit=this.liveDrums;this.live.add(kit);
+    const chrome=new THREE.MeshStandardMaterial({color:'#a9a8a2',roughness:.3,metalness:.88});
+    const shell=new THREE.MeshStandardMaterial({color:'#481a22',roughness:.37,metalness:.3});
+    const skin=new THREE.MeshStandardMaterial({color:'#b0aa98',roughness:.82,side:THREE.DoubleSide});
+    const darkSkin=new THREE.MeshStandardMaterial({color:'#181b1d',roughness:.78,side:THREE.DoubleSide});
+    const bronze=new THREE.MeshStandardMaterial({color:'#ac864d',roughness:.38,metalness:.85,side:THREE.DoubleSide});
+    const felt=new THREE.MeshStandardMaterial({color:'#131315',roughness:1});
+    const rod=(group:THREE.Group,a:THREE.Vector3,b:THREE.Vector3,r=.025,material:THREE.Material=chrome)=>{
+      const direction=b.clone().sub(a),mesh=new THREE.Mesh(new THREE.CylinderGeometry(r,r,direction.length(),10),material);
+      mesh.position.copy(a).add(b).multiplyScalar(.5);mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),direction.normalize());group.add(mesh);
+    };
+    const tripod=(x:number,z:number,height:number)=>{
+      rod(kit,new THREE.Vector3(x,.89,z),new THREE.Vector3(x,height,z));
+      for(let i=0;i<3;i++){
+        const angle=i*Math.PI*2/3;
+        rod(kit,new THREE.Vector3(x,1.18,z),new THREE.Vector3(x+Math.cos(angle)*.43,.88,z+Math.sin(angle)*.43),.018);
+      }
+    };
+    const drum=(radius:number,depth:number,material:THREE.Material,headMaterial=skin)=>{
+      const group=new THREE.Group();
+      group.add(new THREE.Mesh(new THREE.CylinderGeometry(radius,radius,depth,40,1,true),material));
+      for(const side of [-1,1]){
+        const head=new THREE.Mesh(new THREE.CircleGeometry(radius-.025,40),headMaterial);
+        head.rotation.x=-side*Math.PI/2;head.position.y=side*(depth/2+.008);group.add(head);
+        const rim=new THREE.Mesh(new THREE.TorusGeometry(radius,.025,8,40),chrome);
+        rim.rotation.x=Math.PI/2;rim.position.y=side*(depth/2+.022);group.add(rim);
+      }
+      for(let i=0;i<8;i++){
+        const angle=i*Math.PI/4,x=Math.cos(angle)*(radius+.015),z=Math.sin(angle)*(radius+.015);
+        rod(group,new THREE.Vector3(x,-depth*.38,z),new THREE.Vector3(x,depth*.38,z),.016);
+        for(const side of [-1,1]){
+          const lug=new THREE.Mesh(new THREE.BoxGeometry(.07,.1,.07),chrome);lug.position.set(x,side*depth*.3,z);group.add(lug);
+        }
+      }
+      return group;
+    };
+    const bass=drum(.82,.9,shell,darkSkin);bass.rotation.x=Math.PI/2;bass.position.set(0,1.7,.5);kit.add(bass);
+    const port=new THREE.Mesh(new THREE.CircleGeometry(.17,24),felt);port.position.set(-.32,1.41,.975);kit.add(port);
+    for(const side of [-1,1])rod(kit,new THREE.Vector3(side*.65,1.32,.63),new THREE.Vector3(side*.99,.87,.98),.035);
+    const snare=drum(.4,.26,chrome);snare.position.set(.95,1.92,-.55);snare.rotation.x=.08;kit.add(snare);tripod(.95,-.55,1.77);
+    // Keep the rack tom on its mount, with the playing head tilted toward the drummer.
+    const tom=drum(.43,.5,shell);tom.position.set(-.12,2.62,.2);tom.rotation.x=-.22;kit.add(tom);
+    rod(kit,new THREE.Vector3(0,2.18,.5),new THREE.Vector3(0,2.64,.5),.035);
+    rod(kit,new THREE.Vector3(0,2.64,.5),new THREE.Vector3(-.12,2.64,.2),.03);
+    const floor=drum(.54,.72,shell);floor.position.set(-1.18,1.67,-.5);kit.add(floor);
+    for(let i=0;i<3;i++){
+      const angle=i*Math.PI*2/3,x=-1.18-Math.cos(angle)*.57,z=-.5+Math.sin(angle)*.57;
+      rod(kit,new THREE.Vector3(x,1.74,z),new THREE.Vector3(x,1.03,z),.024);
+      rod(kit,new THREE.Vector3(x,1.03,z),new THREE.Vector3(x-Math.cos(angle)*.13,.87,z+Math.sin(angle)*.13),.024);
+    }
+    // A cymbal is a curved sheet with a raised bell, shoulder and thin rolled edge.
+    const cymbal=(radius:number)=>{
+      const profile=[[.018,.18],[.065,.18],[.12,.17],[.19,.13],[.26,.075],[.36,.048],[.55,.028],[.76,.014],[.94,0],[1,-.006]];
+      const group=new THREE.Group();
+      group.add(new THREE.Mesh(new THREE.LatheGeometry(profile.map(([r,y])=>new THREE.Vector2(r*radius,y*radius)),64),bronze));
+      const edge=new THREE.Mesh(new THREE.TorusGeometry(radius,.007,6,64),bronze);edge.rotation.x=Math.PI/2;edge.position.y=-.006*radius;group.add(edge);
+      const washer=new THREE.Mesh(new THREE.CylinderGeometry(.045,.045,.028,16),felt);washer.position.y=.18*radius+.012;group.add(washer);
+      return group;
+    };
+    for(const [x,z,y,r,tilt] of [[1.65,-.3,3.18,.76,.12],[-1.85,-.35,2.95,.9,-.18]]){
+      tripod(x,z,y);const disc=cymbal(r);disc.position.set(x,y,z);disc.rotation.z=tilt;kit.add(disc);
+      rod(disc,new THREE.Vector3(0,0,0),new THREE.Vector3(0,.18*r+.075,0),.018);
+    }
+    const hiX=1.45,hiZ=-1.25,hiY=2.34;tripod(hiX,hiZ,hiY+.14);
+    const hiTop=cymbal(.45);hiTop.position.set(hiX,hiY+.055,hiZ);kit.add(hiTop);
+    const hiBottom=cymbal(.45);hiBottom.rotation.x=Math.PI;hiBottom.position.set(hiX,hiY-.025,hiZ);kit.add(hiBottom);
+    rod(kit,new THREE.Vector3(hiX,.91,hiZ),new THREE.Vector3(hiX,.91,hiZ+.5),.05,felt);
+    const pedal=new THREE.Mesh(new THREE.BoxGeometry(.16,.04,.38),chrome);pedal.position.set(hiX,.93,hiZ+.36);pedal.rotation.x=-.12;kit.add(pedal);
+    const stool=new THREE.Mesh(new THREE.CylinderGeometry(.32,.32,.12,24),felt);stool.position.set(-.1,1.49,-1.3);kit.add(stool);tripod(-.1,-1.3,1.43);
+  }
+
+  private makeSecretFigure(){
+    const cloth=new THREE.MeshStandardMaterial({color:'#252a32',roughness:1,emissive:'#35414e',emissiveIntensity:.48});
+    const add=(geometry:THREE.BufferGeometry,x:number,y:number,z:number,sx=1,sy=1,sz=1)=>{
+      const mesh=new THREE.Mesh(geometry,cloth);mesh.position.set(x,y,z);mesh.scale.set(sx,sy,sz);this.secretFigure.add(mesh);return mesh;
+    };
+    const coatProfile=[[.27,.65],[.32,1],[.25,1.7],[.39,2.16],[.27,2.27],[.12,2.34]];
+    add(new THREE.LatheGeometry(coatProfile.map(([r,y])=>new THREE.Vector2(r,y)),24),0,0,0,1,1,.58);
+    add(new THREE.SphereGeometry(.22,20,16),0,2.57,-.035,.88,1.35,.88);
+    // The nape and coat seam face the viewer; the figure looks toward the wall.
+    add(new THREE.CylinderGeometry(.09,.1,.18,12),0,2.32,0);
+    for(const side of [-1,1]){
+      const arm=add(new THREE.CapsuleGeometry(.085,.84,4,12),side*.36,1.65,.015);arm.rotation.z=side*.07;
+      add(new THREE.CapsuleGeometry(.08,.59,4,12),side*.14,.43,0);
+      add(new THREE.SphereGeometry(.1,12,8),side*.14,.075,-.05,1,.6,1.65);
+    }
+    this.secretFigure.rotation.y=.16;this.live.add(this.secretFigure);
+  }
+
   private makeSignal() {
     for(let i=0;i<36;i++){
       const points=[];
@@ -583,12 +767,21 @@ export class World {
   setFilmHovered(hovered:boolean){this.filmHoverControl=hovered;}
 
   setProgress(progress: number) {
-    this.targetProgress=clamp(progress,0,3);
+    this.targetProgress=clamp(progress,0,4);
+    if(this.capture){this.progress=this.targetProgress;this.progressVelocity=0;}
+    if(progress>2.25&&!this.liveTextureLoading){
+      this.liveTextureLoading=true;
+      new THREE.TextureLoader().load(asset('images/film-'+liveConcert.youtubeId+'.webp'),texture=>{
+        texture.colorSpace=THREE.SRGBColorSpace;this.liveScreen.material.map=texture;this.liveScreen.material.color.setScalar(1.05);this.liveScreen.material.needsUpdate=true;
+        if(this.paused)this.draw();
+      });
+    }
     if(progress>.18)this.loadCovers();
     if(progress>1.25 && !this.filmTextures.size)this.selectFilm(this.selectedFilm);
     if(this.paused)this.draw();
   }
   setPaused(paused: boolean) { this.paused=paused; }
+  setLivePlaying(playing:boolean){this.livePlaying=playing;}
   private resize=()=>{
     this.camera.aspect=innerWidth/innerHeight;
     this.camera.fov=innerWidth<800?58:44;
@@ -642,6 +835,8 @@ export class World {
     this.screenFrame.position.y=CAMERA_HEIGHT/cinemaScale;
     for(const screen of this.screens)screen.position.y=CAMERA_HEIGHT/cinemaScale;
     this.signal.position.set(layout.cinemaX,0,layout.signalZ);
+    this.live.position.set(layout.cinemaX,0,layout.liveZ);
+    this.secretFigure.position.fromArray(liveFigurePosition(mobile));
     this.exitGate.position.set(layout.cinemaX,0,layout.exitZ);
     this.aperture.position.fromArray(door.position);this.aperture.rotation.y=door.rotation;
     this.redLight.position.set(door.position[0],3,door.position[2]+1);
@@ -653,9 +848,10 @@ export class World {
     const breath=.68+Math.sin(this.timer*.22)*.17+Math.sin(this.timer*.73+.8)*.095
       +Math.pow(Math.max(0,Math.sin(this.timer*3.1)),8)*.15;
     const fog=this.scene.fog as THREE.FogExp2;
-    fog.color.set('#10131b').lerp(new THREE.Color('#131824'),smooth(p,.88,1.32));
-    fog.color.lerp(new THREE.Color('#030207'),smooth(p,1.8,2.04));
+    // Distant surfaces must disappear into the background, not reveal room-sized rectangles.
+    fog.color.copy(this.scene.background as THREE.Color);
     fog.density=THREE.MathUtils.lerp(.061,.019,smooth(p,1.76,2.04))*(1+Math.sin(this.timer*.12)*.035);
+    fog.density+=.012*presence.live;
     this.whiteLight.intensity=620*forestFade*(.64+breath*.48);
     this.whiteLight.target.position.set(Math.sin(this.timer*.085)*12,3,-27+Math.sin(this.timer*.12)*4);
     this.redLight.intensity=150*forestFade*breath;
@@ -681,6 +877,20 @@ export class World {
     this.setPresence(this.terrain,presence.forest);
     this.setPresence(this.ritual,presence.gallery);
     this.setPresence(this.cinema,presence.cinema);
+    this.setPresence(this.live,presence.live);
+    this.setPresence(this.liveDrums,presence.live*smooth(this.drumVisibility,0,1));
+    if(p>2.6&&p<3.6){
+      this.scene.updateMatrixWorld(true);this.camera.updateMatrixWorld();
+      const topLeft=this.liveScreen.localToWorld(new THREE.Vector3(-5.8,3.2625,0)).project(this.camera);
+      const bottomRight=this.liveScreen.localToWorld(new THREE.Vector3(5.8,-3.2625,0)).project(this.camera);
+      this.options.onLiveScreen?.({x:(topLeft.x+1)*innerWidth/2,y:(1-topLeft.y)*innerHeight/2,width:(bottomRight.x-topLeft.x)*innerWidth/2,height:(topLeft.y-bottomRight.y)*innerHeight/2});
+    }
+    if(p>2.75&&p<3.4){
+      const top=this.secretFigure.localToWorld(new THREE.Vector3(-.55,2.95,0)).project(this.camera);
+      const bottom=this.secretFigure.localToWorld(new THREE.Vector3(.55,0,0)).project(this.camera);
+      const bounds={x:(top.x+1)*innerWidth/2,y:(1-top.y)*innerHeight/2,width:(bottom.x-top.x)*innerWidth/2,height:(top.y-bottom.y)*innerHeight/2};
+      this.options.onSecretFigure?.(bounds.x<innerWidth&&bounds.x+bounds.width>0&&bounds.height>0?bounds:null);
+    }else this.options.onSecretFigure?.(null);
     this.setPresence(this.signal,presence.signal);
     this.setPresence(this.exitGate,presence.cinemaDoor);
     this.forestVeil.opacity=.84*(1-smooth(p,.68,.84))*presence.forest;
@@ -690,27 +900,34 @@ export class World {
     const galleryLight=new THREE.Vector3().fromArray(interiorPoint([layout.galleryCenterX,3,0],mobile));
     const cinemaLight=new THREE.Vector3().fromArray(interiorPoint([layout.cinemaX,CAMERA_HEIGHT,layout.cinemaZ],mobile));
     const signalLight=new THREE.Vector3().fromArray(interiorPoint([layout.cinemaX,CAMERA_HEIGHT,layout.signalZ-13],mobile));
-    light.lerp(galleryLight,smooth(p,.65,.88)).lerp(cinemaLight,smooth(p,1.68,1.96)).lerp(signalLight,smooth(p,2.24,2.48));
+    const liveLight=new THREE.Vector3().fromArray(interiorPoint([layout.cinemaX,5,layout.liveZ],mobile));
+    light.lerp(galleryLight,smooth(p,.65,.88)).lerp(cinemaLight,smooth(p,1.68,1.96)).lerp(liveLight,smooth(p,2.55,2.95)).lerp(signalLight,smooth(p,3.5,3.85));
     this.lens.render(this.scene,this.camera,this.timer,p,light,breath);
   }
   private render=(now: number)=>{
     if(this.stopped)return;
     this.frame=requestAnimationFrame(this.render);
     if(document.hidden)return;
-    const delta=this.lastTime?Math.min((now-this.lastTime)/1000,.1):1/60;this.lastTime=now;
+    const elapsed=this.lastTime?(now-this.lastTime)/1000:1/60,delta=Math.min(elapsed,.1);this.lastTime=now;
     const settled=Math.abs(this.progress-this.targetProgress)<.0001&&Math.abs(this.progressVelocity)<.0001;
-    if(this.paused && settled)return;
-    // Critically damped scroll tracking preserves velocity when a wheel event changes the destination.
-    const frequency=8,offset=this.progress-this.targetProgress,decay=Math.exp(-frequency*delta);
-    const travel=(this.progressVelocity+frequency*offset)*delta;
-    this.progress=this.targetProgress+(offset+travel)*decay;
-    this.progressVelocity=(this.progressVelocity-frequency*travel)*decay;
-    this.pointer.lerp(this.paused?new THREE.Vector2():this.pointerTarget,Math.min(delta*2,1));
+    const drumTarget=this.livePlaying?0:1,drumsSettled=this.drumVisibility===drumTarget;
+    if(this.paused && settled && drumsSettled)return;
+    const fadeStep=elapsed/.8;
+    this.drumVisibility+=clamp(drumTarget-this.drumVisibility,-fadeStep,fadeStep);
+    // A playback fade may render while paused, without moving the settled camera.
+    if(!this.paused || !settled){
+      // Critically damped scroll tracking preserves velocity when a wheel event changes the destination.
+      const frequency=8,offset=this.progress-this.targetProgress,decay=Math.exp(-frequency*delta);
+      const travel=(this.progressVelocity+frequency*offset)*delta;
+      this.progress=this.targetProgress+(offset+travel)*decay;
+      this.progressVelocity=(this.progressVelocity-frequency*travel)*decay;
+      this.pointer.lerp(this.paused?new THREE.Vector2():this.pointerTarget,Math.min(delta*2,1));
+    }
     if(!this.paused)this.timer+=delta;
     for(const material of [...this.fogMaterials,...this.timeMaterials])material.uniforms.uTime.value=this.timer;
     this.draw();
     document.body.classList.add('scene-ready');
-    if(!this.capture && !this.hasMeasured && this.timer>2){
+    if(!this.capture && !this.paused && !this.hasMeasured && this.timer>2){
       this.performanceFrames++;this.performanceTime+=delta;
       if(this.performanceTime>3){
         this.hasMeasured=true;

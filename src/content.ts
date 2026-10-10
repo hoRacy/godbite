@@ -1,5 +1,7 @@
 export type Language = 'en' | 'pl';
-export type Chapter = 'threshold' | 'music' | 'cinema' | 'contact';
+export type Chapter = 'threshold' | 'music' | 'cinema' | 'live' | 'contact';
+export const liveConcert={youtubeId:'KYkbLPMH7xA',title:'Godbite @ Jambar — Full Live Show'};
+export const secretConcert={youtubeId:'ql6nWvkPoUI',title:'Godrite — Secret live concert'};
 export interface Release {
   id: string; title: string; year: number; kind: 'album' | 'ep' | 'single';
   cover: string; bandcamp: string; spotify?: string; artwork?: string;
@@ -37,8 +39,9 @@ export const socials = [
 ] as const;
 export const copy = {
   en: {
+    live: 'Live', club: 'The club', liveTitle: 'Godbite @ Jambar', liveKind: 'Live concert', liveIntro: 'An empty room. The sound remains.', playLive: 'Play concert', stopLive: 'Close video', secretFigure: 'A figure in the dark',
     listen: 'Listen', watch: 'Watch', contact: 'Contact', sound: 'Sound', on: 'On', off: 'Off', soundHint: 'Sound awakens with your first touch.',
-    tagline: 'Dependent music / No alternative', forest: 'You wake in a white forest without windows.',
+    tagline: 'Dependent music / No alternative', hometown: 'Szczecin, Poland', forest: 'You wake in a white forest without windows.',
     follow: 'Follow the red light', latest: 'The latest transmission', play: 'Play film',
     threshold: 'The threshold', music: 'The ritual', cinema: 'The cinema', signal: 'The signal',
     musicTitle: 'Five offerings.', musicIntro: 'Something of us remains in every recording.',
@@ -57,8 +60,9 @@ export const copy = {
     loadingFilm: 'Opening the projection…', failedFilm: 'If the projection does not start, watch on YouTube.',
   },
   pl: {
+    live: 'Live', club: 'Klub', liveTitle: 'Godbite @ Jambar', liveKind: 'Koncert na żywo', liveIntro: 'Pusta sala. Dźwięk pozostaje.', playLive: 'Odtwórz koncert', stopLive: 'Zamknij film', secretFigure: 'Postać w mroku',
     listen: 'Słuchaj', watch: 'Oglądaj', contact: 'Kontakt', sound: 'Dźwięk', on: 'Wł.', off: 'Wył.', soundHint: 'Porusz myszką, przewiń lub dotknij, by obudzić dźwięk. Jeśli nadal jest cisza, kliknij lub naciśnij klawisz.',
-    tagline: 'Muzyka zależna / Brak alternatywy', forest: 'Budzisz się w białym lesie bez okien.',
+    tagline: 'Muzyka zależna / Brak alternatywy', hometown: 'Szczecin, Polska', forest: 'Budzisz się w białym lesie bez okien.',
     follow: 'Idź za czerwonym światłem', latest: 'Najnowsza transmisja', play: 'Odtwórz film',
     threshold: 'Próg', music: 'Rytuał', cinema: 'Kino', signal: 'Sygnał',
     musicTitle: 'Pięć ofiar.', musicIntro: 'Coś z nas zostaje w każdym nagraniu.',

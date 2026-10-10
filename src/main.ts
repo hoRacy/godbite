@@ -3,17 +3,17 @@ import '@fontsource/bodoni-moda/latin-ext-500.css';
 import '@fontsource/ibm-plex-mono/latin-400.css';
 import '@fontsource/ibm-plex-mono/latin-ext-400.css';
 import './style.css';
-import { asset, copy, films, releases, socials, tracklists } from './content';
+import { asset, copy, films, releases, socials, tracklists, liveConcert, secretConcert } from './content';
 import type { Chapter, Language } from './content';
 import { Ambient } from './ambient';
-import { SCENE_ANCHORS, activeRecording, chapterPresentation } from './journey';
+import { SCENE_ANCHORS, activeRecording, chapterPresentation, liveFigureStillBounds } from './journey';
 import type { World } from './world';
 
 const $ = <T extends HTMLElement = HTMLElement>(selector: string) => document.querySelector<T>(selector)!;
-const chapters: Chapter[] = ['threshold', 'music', 'cinema', 'contact'];
+const chapters: Chapter[] = ['threshold', 'music', 'cinema', 'live', 'contact'];
 const sections = chapters.map(id => $('#'+id));
 const stages = sections.map(section => section.querySelector<HTMLElement>('.chapter-stage')!);
-const chapterKeys = ['threshold', 'music', 'cinema', 'signal'] as const;
+const chapterKeys = ['threshold', 'music', 'cinema', 'club', 'signal'] as const;
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
 let language: Language = 'en';
 try { if (localStorage.getItem('godbite-language') === 'pl') language = 'pl'; } catch { /* Storage can be unavailable in private browser contexts. */ }
@@ -106,9 +106,13 @@ function showRecording(index: number){
 }
 function syncModalState() {
   const open=dialogs.some(dialog=>dialog.open);
+  const livePlaying=Boolean($('#live-screen-player').childElementCount);
   document.body.classList.toggle('modal-open',open);
-  ambient.setBlocked(filmDialog.open);
+  document.body.classList.toggle('live-playing',livePlaying);
+  ambient.setBlocked(filmDialog.open||livePlaying);
+  world?.setLivePlaying(livePlaying);
   world?.setPaused(open||userPaused);
+  if(stillMode)updateStill();
 }
 function openDialog(dialog: HTMLDialogElement) {
   const invoker=lastInvoker ?? (document.activeElement instanceof HTMLElement?document.activeElement:null);
@@ -131,11 +135,16 @@ function selectFilm(id: string) {
 }
 function openFilm(id: string) {
   selectFilm(id);
-  $('#projection-title').textContent=selectedFilm.title;
-  $<HTMLAnchorElement>('#external-film').href='https://www.youtube.com/watch?v='+selectedFilm.youtubeId;
+  openProjection(selectedFilm.title,selectedFilm.youtubeId,'cinema');
+}
+function openProjection(title:string,youtubeId:string,kind:'cinema'|'club'){
+  stopLive();
+  $('#projection-kind').dataset.i18n=kind;$('#projection-kind').textContent=copy[language][kind];
+  $('#projection-title').textContent=title;
+  $<HTMLAnchorElement>('#external-film').href='https://www.youtube.com/watch?v='+youtubeId;
   const frame=document.createElement('iframe');
-  frame.title=selectedFilm.title+' — Godbite';
-  frame.src='https://www.youtube-nocookie.com/embed/'+selectedFilm.youtubeId+'?autoplay=1&rel=0&playsinline=1';
+  frame.title=title;
+  frame.src='https://www.youtube-nocookie.com/embed/'+youtubeId+'?autoplay=1&rel=0&playsinline=1';
   frame.allow='autoplay; encrypted-media; picture-in-picture; fullscreen';frame.allowFullscreen=true;
   frame.referrerPolicy='strict-origin-when-cross-origin';
   $('#film-player').replaceChildren(frame);openDialog(filmDialog);
@@ -166,6 +175,21 @@ $('#previous-release').addEventListener('click',()=>{selectedRelease=(selectedRe
 $('#next-release').addEventListener('click',()=>{selectedRelease=(selectedRelease+1)%5;updateRelease();});
 $('#credits-button').addEventListener('click',()=>openDialog(creditsDialog));
 $('#cinema-play').addEventListener('click',()=>openFilm(selectedFilm.id));
+function stopLive(){
+  $('#live-screen-player').replaceChildren();$('#live-play').hidden=false;$('#live-stop').hidden=true;
+  syncModalState();
+}
+$('#live-play').addEventListener('click',()=>{
+  const frame=document.createElement('iframe');
+  frame.title=liveConcert.title;
+  frame.src='https://www.youtube-nocookie.com/embed/'+liveConcert.youtubeId+'?autoplay=1&rel=0&playsinline=1';
+  frame.allow='autoplay; encrypted-media; picture-in-picture; fullscreen';frame.allowFullscreen=true;
+  frame.referrerPolicy='strict-origin-when-cross-origin';
+  $('#live-screen-player').replaceChildren(frame);$('#live-play').hidden=true;$('#live-stop').hidden=false;
+  syncModalState();
+});
+$('#live-stop').addEventListener('click',()=>{stopLive();$('#live-play').focus({preventScroll:true});});
+$('#secret-figure').addEventListener('click',()=>openProjection(secretConcert.title,secretConcert.youtubeId,'club'));
 document.querySelectorAll<HTMLButtonElement>('[data-play]').forEach(button=>button.addEventListener('click',()=>openFilm(button.dataset.play!)));
 $('#sound-toggle').addEventListener('click',()=>{void ambient.toggle();});
 function awakenSound(event: Event){
@@ -200,6 +224,8 @@ function translate() {
   document.querySelector('.language-switch')!.setAttribute('aria-label',text.language);
   releaseList.setAttribute('aria-label',text.selectRelease);filmList.setAttribute('aria-label',text.chooseFilm);
   $('#previous-film').setAttribute('aria-label',text.previousFilm);$('#next-film').setAttribute('aria-label',text.nextFilm);
+  $('#secret-figure').setAttribute('aria-label',text.secretFigure);
+  $('#live-stop').setAttribute('aria-label',text.stopLive);
   document.querySelectorAll('[data-close]').forEach(button=>button.setAttribute('aria-label',text.close));
   $('#previous-release').setAttribute('aria-label',text.previous);$('#next-release').setAttribute('aria-label',text.next);
   $('#chapter-name').textContent=text[chapterKeys[currentChapter]];
@@ -219,13 +245,20 @@ function progress(){
     const start=sections[index].offsetTop,end=sections[index+1].offsetTop;
     if(y<end)return SCENE_ANCHORS[index]+(SCENE_ANCHORS[index+1]-SCENE_ANCHORS[index])*Math.max(0,(y-start)/(end-start));
   }
-  return 3;
+  return 4;
 }
 let scrollPending=false;
 function updateStill(){
   const scene=chapters[currentChapter];
-  const image=scene==='cinema'&&selectedFilm.id!==films[0].id?'cinema-'+selectedFilm.id:scene;
+  const image=scene==='cinema'&&selectedFilm.id!==films[0].id?'cinema-'+selectedFilm.id:scene==='live'&&innerWidth<800?'live-mobile':scene;
   still.style.backgroundImage='url("'+asset('images/'+image+'.webp')+'")';
+  if(scene==='live')$('#still-live-playing').style.backgroundImage='url("'+asset('images/'+image+'-playing.webp')+'")';
+  if(scene==='live')positionSecretFigure(liveFigureStillBounds(innerWidth,innerHeight));
+}
+function positionSecretFigure(bounds:{x:number;y:number;width:number;height:number}|null){
+  const trigger=$('#secret-figure');trigger.hidden=!bounds;
+  if(!bounds)return;
+  for(const [key,value] of Object.entries(bounds))trigger.style.setProperty('--figure-'+key,value+'px');
 }
 function updateJourney() {
   scrollPending=false;
@@ -237,11 +270,12 @@ function updateJourney() {
     sections[i].setAttribute('aria-hidden',String(hidden));
   });
   currentChapter=index;
+  if(index!==3&&$('#live-screen-player').childElementCount)stopLive();
   document.body.dataset.chapter=chapters[index];
   if(index!==2)world?.setFilmHovered(false);
   $('#chapter-name').textContent=copy[language][chapterKeys[index]];
   $('#chapter-number').textContent=String(index+1).padStart(2,'0');
-  $('#position-fill').style.width=(p/3*100)+'%';
+  $('#position-fill').style.width=(p/4*100)+'%';
   document.querySelectorAll<HTMLAnchorElement>('[data-nav]').forEach(anchor=>{
     if(anchor.dataset.nav===chapters[index])anchor.setAttribute('aria-current','location');
     else anchor.removeAttribute('aria-current');
@@ -289,6 +323,7 @@ projection.addEventListener('focus',()=>world?.setFilmHovered(true));
 projection.addEventListener('blur',()=>world?.setFilmHovered(false));
 
 function useStills() {
+  for(const key of ['left','top','width','height'])stages[3].style.removeProperty('--live-'+key);
   stillMode=true;document.body.classList.add('still-mode');document.body.classList.remove('scene-ready');
   world?.destroy();world=undefined;
   updateJourney();
@@ -299,11 +334,16 @@ async function startWorld() {
   try {
     const {World}=await import('./world');
     if(generation!==worldGeneration || reducedMotion.matches)return;
-    world=new World({canvas:$<HTMLCanvasElement>('#world-canvas'),onFailure:useStills,onRelease:openRelease,onFilm:()=>openFilm(selectedFilm.id),onRecording:index=>{
+    world=new World({canvas:$<HTMLCanvasElement>('#world-canvas'),onFailure:useStills,onRelease:openRelease,onFilm:()=>openFilm(selectedFilm.id),onLiveScreen:bounds=>{
+      const stage=stages[3];
+      stage.style.setProperty('--live-left',bounds.x+'px');stage.style.setProperty('--live-top',bounds.y+'px');
+      stage.style.setProperty('--live-width',bounds.width+'px');stage.style.setProperty('--live-height',bounds.height+'px');
+    },onSecretFigure:positionSecretFigure,onRecording:index=>{
       showRecording(index);
     }});
     stillMode=false;document.body.classList.remove('still-mode');
     world.setProgress(progress());world.setPaused(userPaused);
+    world.setLivePlaying(Boolean($('#live-screen-player').childElementCount));
     if(selectedFilm.id!==films[0].id)world.selectFilm(selectedFilm.id);
   } catch {useStills();}
 }

@@ -149,7 +149,7 @@ export class Ambient {
   setBlocked(blocked: boolean){this.blocked=blocked;this.update();}
   setProgress(progress: number){
     this.progress=progress;
-    this.graph?.wind.frequency.setTargetAtTime(330-45*Math.min(progress,3)/3,this.context!.currentTime,2);
+    this.graph?.wind.frequency.setTargetAtTime(330-45*Math.min(progress,4)/4,this.context!.currentTime,2);
   }
   private create(){
     if(this.context)return;

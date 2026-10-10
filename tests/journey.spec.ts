@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import sharp from 'sharp';
 
 test.beforeEach(async ({page})=>{
   await page.route('https://www.youtube-nocookie.com/**',route=>route.fulfill({contentType:'text/html',body:'<!doctype html><html><body>Test projection</body></html>'}));
@@ -74,6 +75,96 @@ test('all four films use the right player and closing removes playback',async({p
     await expect(page.locator('#external-film')).toHaveAttribute('href','https://www.youtube.com/watch?v='+youtube);
     await page.keyboard.press('Escape');await expect(page.locator('iframe')).toHaveCount(0);
   }
+});
+
+for(const reducedMotion of ['no-preference','reduce'] as const){
+ test(`the hidden figure reveals Godrite and closes other playback (${reducedMotion})`,async({page})=>{
+  const errors:string[]=[];page.on('pageerror',error=>errors.push(error.message));
+  await page.emulateMedia({reducedMotion});await page.goto('./');
+  await expect(page.locator('#secret-figure')).not.toBeVisible();
+  await page.locator('[data-nav=live]').click();await page.waitForTimeout(2000);
+  const figure=page.locator('#secret-figure');await expect(figure).toBeVisible();
+  const bounds=await figure.boundingBox(),viewport=page.viewportSize()!;
+  expect(bounds!.x).toBeGreaterThan(viewport.width*.7);
+  expect(bounds!.x+bounds!.width/2).toBeLessThan(viewport.width);
+  expect(bounds!.y+bounds!.height).toBeLessThan(viewport.height);
+  await expect(page.locator('iframe')).toHaveCount(0);
+  if(reducedMotion==='reduce'&&viewport.width<800){
+    await expect(page.locator('#still-world')).toHaveCSS('background-image',/live-mobile\.webp/);
+    expect((await page.request.get('images/live-mobile.webp')).ok()).toBe(true);
+  }
+  await page.locator('#live-play').click();await figure.click();
+  await expect(page.locator('#film-dialog')).toBeVisible();
+  await expect(page.locator('#projection-title')).toHaveText('Godrite — Secret live concert');
+  await expect(page.locator('#projection-kind')).toHaveText('The club');
+  await expect(page.locator('#film-player iframe')).toHaveAttribute('src',/embed\/ql6nWvkPoUI\?autoplay=1/);
+  await expect(page.locator('#external-film')).toHaveAttribute('href','https://www.youtube.com/watch?v=ql6nWvkPoUI');
+  await expect(page.locator('#live-screen-player iframe')).toHaveCount(0);
+  await page.keyboard.press('Escape');await expect(page.locator('iframe')).toHaveCount(0);await expect(figure).toBeFocused();
+  await page.keyboard.press('Enter');await expect(page.locator('#film-dialog')).toBeVisible();
+  await page.keyboard.press('Escape');await page.locator('[data-nav=cinema]').click();
+  await expect(figure).not.toBeVisible();await page.locator('#cinema-play').click();
+  await expect(page.locator('#projection-kind')).toHaveText('The cinema');
+  await expect(page.locator('#film-player iframe')).toHaveAttribute('src',/embed\/y5Bw0fB5nU8\?/);
+  expect(errors).toEqual([]);
+ });
+}
+
+for(const reducedMotion of ['no-preference','reduce'] as const){
+ test(`live club plays the concert on its screen and stops on departure (${reducedMotion})`,async({page})=>{
+  const errors:string[]=[];page.on('pageerror',error=>errors.push(error.message));
+  await page.emulateMedia({reducedMotion});await page.goto('./');
+  await page.locator('[data-nav=live]').click();
+  await expect(page.locator('body')).toHaveAttribute('data-chapter','live');
+  await expect(page.locator('#live-title')).toHaveText('Godbite @ Jambar');
+  await expect(page.locator('#chapter-number')).toHaveText('04');
+  await expect(page.locator('.total-chapters')).toHaveText('05');
+  await page.waitForTimeout(2000);
+  await page.screenshot({path:`test-results/live-${page.viewportSize()!.width}-${reducedMotion}.png`});
+  await page.locator('#live-play').click();
+  await expect(page.locator('body')).toHaveClass(/live-playing/);
+  await expect(page.locator('#live-screen-player iframe')).toHaveAttribute('src',/embed\/KYkbLPMH7xA\?autoplay=1/);
+  await expect(page.locator('#live-stop')).toBeVisible();await expect(page.locator('#live-stop')).toBeInViewport();
+  if(reducedMotion==='reduce'){
+    await expect(page.locator('#still-live-playing')).toHaveCSS('opacity','1');
+    const name=page.viewportSize()!.width<800?'live-mobile-playing':'live-playing';
+    await expect(page.locator('#still-live-playing')).toHaveCSS('background-image',new RegExp(name+'\\.webp'));
+    expect((await page.request.get('images/'+name+'.webp')).ok()).toBe(true);
+  }
+  const bounds=await page.locator('#live-screen-player iframe').boundingBox();expect(bounds!.width).toBeGreaterThan(100);expect(bounds!.height).toBeGreaterThan(60);
+  await page.locator('#live-stop').click();await expect(page.locator('#live-screen-player iframe')).toHaveCount(0);
+  await expect(page.locator('body')).toHaveAttribute('data-chapter','live');
+  await expect(page.locator('#live-stop')).not.toBeVisible();await expect(page.locator('#live-play')).toBeFocused();
+  await expect(page.locator('body')).not.toHaveClass(/live-playing/);
+  if(reducedMotion==='reduce')await expect(page.locator('#still-live-playing')).toHaveCSS('opacity','0');
+  await page.locator('#live-play').click();await page.locator('[data-nav=contact]').click();
+  await expect(page.locator('#live-screen-player iframe')).toHaveCount(0);
+  await expect(page.locator('#chapter-number')).toHaveText('05');
+  await expect(page.locator('.contact-address>a')).toBeVisible();
+  expect(errors).toEqual([]);
+ });
+}
+
+test('drums fade during screen playback and return even with world motion paused',async({page},testInfo)=>{
+ test.skip(testInfo.project.name!=='chrome','Compare the rendered drum kit in desktop Chromium.');
+ await page.goto('./');await expect(page.locator('body')).toHaveClass(/scene-ready/);
+ await page.locator('[data-nav=live]').click();await page.waitForTimeout(2000);
+ await page.locator('#motion-toggle').click();await page.waitForTimeout(1000);
+ const screen=await page.locator('#live-screen-player').boundingBox(),viewport=page.viewportSize()!;
+ const clip={x:viewport.width*.44,y:Math.ceil(screen!.y+screen!.height)+2,width:viewport.width*.12,height:viewport.height*.045};
+ const resolution=await page.locator('#world-canvas').evaluate((canvas:HTMLCanvasElement)=>[canvas.width,canvas.height]);
+ const before=await page.screenshot({clip,path:testInfo.outputPath('drums-before.png')});
+ await page.locator('#live-play').click();await page.waitForTimeout(1600);
+ const playing=await page.screenshot({clip,path:testInfo.outputPath('drums-playing.png')});expect(playing.equals(before)).toBe(false);
+ await page.waitForTimeout(300);expect((await page.screenshot({clip})).equals(playing)).toBe(true);
+ await page.locator('#live-stop').click();await page.waitForTimeout(1600);
+ expect(await page.locator('#world-canvas').evaluate((canvas:HTMLCanvasElement)=>[canvas.width,canvas.height])).toEqual(resolution);
+ const restored=await page.screenshot({clip,path:testInfo.outputPath('drums-restored.png')});
+ const [originalPixels,playingPixels,restoredPixels]=await Promise.all([before,playing,restored].map(image=>sharp(image).raw().toBuffer()));
+ const difference=(pixels:Buffer)=>originalPixels.reduce((sum,value,index)=>sum+Math.abs(value-pixels[index]),0)/originalPixels.length;
+ // Allow tiny changes in translucent chrome rendering while requiring the kit to return visibly.
+ expect(difference(restoredPixels)).toBeLessThan(3);
+ expect(difference(restoredPixels)).toBeLessThan(difference(playingPixels)*.35);
 });
 
 test('cinema screen changes for every film while motion is paused',async({page},testInfo)=>{

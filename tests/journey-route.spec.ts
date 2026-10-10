@@ -90,7 +90,7 @@ test('camera velocity and acceleration join smoothly and the exit arc clears the
  const results=await page.evaluate(()=>{
   const {cameraRoute,RECORD_STOPS}=(window as any).godbiteRoute,epsilon=1e-6;
   return [false,true].map(mobile=>({mobile,
-   joins:[1,...RECORD_STOPS,1.82,1.9,2,2.5,2.6].map(p=>{
+   joins:[1,...RECORD_STOPS,1.82,1.9,2,2.5,2.6,3,3.5,3.65].map(p=>{
     const before=cameraRoute(p-epsilon,mobile),at=cameraRoute(p,mobile),after=cameraRoute(p+epsilon,mobile);
     return (['position','target'] as const).map(key=>at[key].map((value:number,axis:number)=>({
      left:(value-before[key][axis])/epsilon,right:(after[key][axis]-value)/epsilon,
@@ -118,7 +118,7 @@ test('mist and rooms fade continuously without revealing the cinema during the r
  const result=await page.evaluate(()=>{
   const {scenePresence,RECORD_STOPS}=(window as any).godbiteRoute;
   return {records:RECORD_STOPS.map((p:number)=>scenePresence(p)),
-   samples:Array.from({length:3001},(_,i)=>scenePresence(i*.001))};
+   samples:Array.from({length:4001},(_,i)=>scenePresence(i*.001))};
  });
  for(const stop of result.records){expect(stop.forest).toBe(1);expect(stop.gallery).toBe(1);expect(stop.cinema).toBe(0);}
  for(let i=1;i<result.samples.length;i++){
@@ -131,7 +131,9 @@ test('mist and rooms fade continuously without revealing the cinema during the r
  expect(result.samples[1900].cinema).toBeLessThan(1);
  expect(result.samples[2500].cinema).toBeGreaterThan(.9);
  expect(result.samples[2640].cinema).toBe(0);
- expect(result.samples[2740].signal).toBe(1);
+ expect(result.samples[3000].live).toBe(1);
+ expect(result.samples[3000].signal).toBe(0);
+ expect(result.samples[3860].signal).toBe(1);
 });
 
 test('all opening text disappears before halfway through the forest, ahead of the door',async({page})=>{

@@ -5,10 +5,22 @@ const mix=(a:Point,b:Point,t:number)=>a.map((value,index)=>value+(b[index]-value
 const fade=(p:number,start:number,end:number)=>smooth((p-start)/(end-start));
 
 export const RECORD_STOPS=[1.16,1.29,1.42,1.55,1.68] as const;
-export const SCENE_ANCHORS=[0,RECORD_STOPS[0],2,3] as const;
+export const SCENE_ANCHORS=[0,RECORD_STOPS[0],2,3,4] as const;
 export const DOOR_CROSSINGS=[.9,1.9] as const;
 export const SCREEN_CROSSING=2.6;
 export const CAMERA_HEIGHT=3.5;
+export const liveFigurePosition=(mobile:boolean):Point=>[mobile?6.6:13,0,-4.5];
+
+/** Follow background-size:cover so the secret remains aligned with the captured silhouette. */
+export function liveFigureStillBounds(width:number,height:number){
+ const mobile=width<800,imageWidth=mobile?390:1600,imageHeight=mobile?844:1000;
+ const [x,,z]=liveFigurePosition(mobile),distance=(mobile?27:22)-z;
+ const pixelsPerUnit=imageHeight/(2*distance*Math.tan((mobile?58:44)*Math.PI/360));
+ const scale=Math.max(width/imageWidth,height/imageHeight),radius=.55*Math.cos(.16);
+ return {x:(width-imageWidth*scale)/2+(imageWidth/2+(x-radius)*pixelsPerUnit)*scale,
+  y:(height-imageHeight*scale)/2+(imageHeight/2+(CAMERA_HEIGHT-2.95)*pixelsPerUnit)*scale,
+  width:2*radius*pixelsPerUnit*scale,height:2.95*pixelsPerUnit*scale};
+}
 
 export function forestDoor(mobile:boolean){
  const {position}=cameraRoute(DOOR_CROSSINGS[0],mobile);
@@ -19,7 +31,7 @@ export function forestDoor(mobile:boolean){
 export function interiorLayout(mobile:boolean){
  const scale=mobile?.75:1;
  return {origin:[0,0,-48] as Point,rotation:0,scale,
-  galleryCenterX:8.8*scale,cinemaX:22*scale,cinemaZ:-53,exitZ:-16,signalZ:-104};
+  galleryCenterX:8.8*scale,cinemaX:22*scale,cinemaZ:-53,exitZ:-16,liveZ:-109,signalZ:-170};
 }
 
 export function interiorPoint(point:Point,mobile:boolean):Point{
@@ -30,7 +42,7 @@ export function interiorPoint(point:Point,mobile:boolean):Point{
 interface Stop { at:number; position:Point; target:Point }
 
 function routeStops(mobile:boolean):Stop[]{
- const {scale,cinemaX,cinemaZ,exitZ,signalZ}=interiorLayout(mobile);
+ const {scale,cinemaX,cinemaZ,exitZ,liveZ,signalZ}=interiorLayout(mobile);
  return [
   {at:0,position:[0,CAMERA_HEIGHT,64],target:[0,CAMERA_HEIGHT,0]},
   {at:1,position:[0,CAMERA_HEIGHT,17],target:[0,CAMERA_HEIGHT,0]},
@@ -42,9 +54,12 @@ function routeStops(mobile:boolean):Stop[]{
   {at:1.82,position:[cinemaX,CAMERA_HEIGHT,-8],target:[cinemaX,CAMERA_HEIGHT,-30]},
   {at:DOOR_CROSSINGS[1],position:[cinemaX,CAMERA_HEIGHT,exitZ],target:[cinemaX,CAMERA_HEIGHT,cinemaZ]},
   {at:2,position:[cinemaX,CAMERA_HEIGHT,cinemaZ+(mobile?20:18)],target:[cinemaX,CAMERA_HEIGHT,cinemaZ]},
-  {at:2.5,position:[cinemaX,CAMERA_HEIGHT,cinemaZ+3],target:[cinemaX,CAMERA_HEIGHT,signalZ]},
-  {at:SCREEN_CROSSING,position:[cinemaX,CAMERA_HEIGHT,cinemaZ],target:[cinemaX,CAMERA_HEIGHT,signalZ]},
-  {at:3,position:[cinemaX,CAMERA_HEIGHT,cinemaZ-25],target:[cinemaX,CAMERA_HEIGHT,signalZ]},
+  {at:2.5,position:[cinemaX,CAMERA_HEIGHT,cinemaZ+3],target:[cinemaX,CAMERA_HEIGHT,liveZ]},
+  {at:SCREEN_CROSSING,position:[cinemaX,CAMERA_HEIGHT,cinemaZ],target:[cinemaX,CAMERA_HEIGHT,liveZ]},
+  {at:3,position:[cinemaX,CAMERA_HEIGHT,liveZ+(mobile?27:22)],target:[cinemaX,CAMERA_HEIGHT,liveZ]},
+  {at:3.5,position:[cinemaX,CAMERA_HEIGHT,liveZ+6],target:[cinemaX,CAMERA_HEIGHT,signalZ]},
+  {at:3.65,position:[cinemaX,CAMERA_HEIGHT,liveZ-2],target:[cinemaX,CAMERA_HEIGHT,signalZ]},
+  {at:4,position:[cinemaX,CAMERA_HEIGHT,liveZ-25],target:[cinemaX,CAMERA_HEIGHT,signalZ]},
  ];
 }
 
@@ -72,7 +87,7 @@ function interpolate(stops:Stop[],index:number,key:'position'|'target',t:number)
 const desktopStops=routeStops(false),mobileStops=routeStops(true);
 
 export function cameraRoute(progress:number,mobile:boolean){
- const p=clamp(progress,0,3),stops=mobile?mobileStops:desktopStops;
+ const p=clamp(progress,0,4),stops=mobile?mobileStops:desktopStops;
  // Suppress pointer sway throughout the straight entrances, including their approaches.
  const lookAround=fade(p,1.04,1.16)*(1-fade(p,1.68,1.82));
  const next=stops.findIndex(stop=>stop.at>p);
@@ -97,7 +112,7 @@ export function forestTreePosition(x:number,z:number,index:number):[number,numbe
 /** Fade both geometry and its lights; never replace a room or its mist in a single frame. */
 export function scenePresence(progress:number){
  return {forest:1-fade(progress,1.76,1.94),gallery:fade(progress,.68,.88)*(1-fade(progress,1.88,2.1)),
-  cinema:fade(progress,1.78,1.96)*(1-fade(progress,2.48,2.64)),signal:fade(progress,2.48,2.74),
+  cinema:fade(progress,1.78,1.96)*(1-fade(progress,2.48,2.64)),live:fade(progress,2.52,2.88)*(1-fade(progress,3.48,3.74)),signal:fade(progress,3.56,3.86),
   cinemaDoor:fade(progress,1.56,1.76)*(1-fade(progress,2.02,2.16))};
 }
 
@@ -107,12 +122,13 @@ export function activeRecording(progress:number){
 
 /** Text has its own entrance and exit, independent of the physical portal crossing. */
 export function chapterPresentation(progress:number){
- const index=progress<.94?0:progress<1.8?1:progress<2.65?2:3;
+ const index=progress<.94?0:progress<1.8?1:progress<2.65?2:progress<3.65?3:4;
  const opacity=[
   1-fade(progress,.08,.42),
   fade(progress,.94,1.16)*(1-fade(progress,1.68,1.8)),
   fade(progress,1.8,2)*(1-fade(progress,2.4,2.65)),
-  fade(progress,2.65,3),
+  fade(progress,2.65,3)*(1-fade(progress,3.4,3.65)),
+  fade(progress,3.65,4),
  ][index];
  return {index,opacity};
 }
